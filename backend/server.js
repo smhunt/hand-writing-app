@@ -3,6 +3,10 @@ const session = require('express-session');
 const cookieParser = require('cookie-parser');
 const path = require('path');
 
+const logger = require('./logger');
+const { requestLogger, addRequestTime } = require('./middleware/requestLogger');
+const { notFound, errorHandler } = require('./middleware/errorHandler');
+
 const authRoutes = require('./auth');
 const profileRoutes = require('./profile');
 const generateRoutes = require('./generate');
@@ -11,7 +15,11 @@ const generateRoutes = require('./generate');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Middleware
+// Request timing and logging
+app.use(addRequestTime);
+app.use(requestLogger);
+
+// Body parsing middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
@@ -45,12 +53,28 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK' });
 });
 
+// Error handling middleware (must be last)
+app.use(notFound);
+app.use(errorHandler);
+
 // Start server only if not being required for testing
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`Backend server listening on port ${PORT}`);
+    logger.info(`Backend server listening on port ${PORT}`);
+    logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
   });
 }
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught Exception:', error);
+  process.exit(1);
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
 
 // Export for testing
 module.exports = app;
