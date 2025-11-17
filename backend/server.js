@@ -14,6 +14,7 @@ const { apiLimiter } = require('./middleware/rateLimiter');
 const authRoutes = require('./auth');
 const profileRoutes = require('./profile');
 const generateRoutes = require('./generate');
+const fontRoutes = require('./routes/font');
 
 // Initialize Express
 const app = express();
@@ -44,8 +45,9 @@ if (config.isProduction) {
 }
 
 // Request timing and logging
-app.use(addRequestTime);
-app.use(requestLogger);
+// Temporarily disabled custom logger
+// app.use(addRequestTime);
+// app.use(requestLogger);
 
 // CORS middleware
 if (config.cors.enabled) {
@@ -96,6 +98,7 @@ app.use('/static', express.static(path.join(__dirname, 'public')));
 app.use('/api', authRoutes);
 app.use('/api', profileRoutes);
 app.use('/api', generateRoutes);
+app.use('/api/font', fontRoutes);
 
 // Enhanced health check endpoint
 app.get('/api/health', (req, res) => {

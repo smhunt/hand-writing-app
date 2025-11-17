@@ -3,6 +3,9 @@ import React, { useEffect, useState } from 'react';
 function ProfilePage({ user }) {
   const [uploadStatus, setUploadStatus] = useState(null);
   const [availableChars, setAvailableChars] = useState([]);
+  const [fontInfo, setFontInfo] = useState(null);
+  const [fontStatus, setFontStatus] = useState(null);
+  const [generatingFont, setGeneratingFont] = useState(false);
 
   useEffect(() => {
     // Fetch profile info (which chars are available)
@@ -14,8 +17,20 @@ function ProfilePage({ user }) {
       }
     }
 
+    // Fetch font info if exists
+    async function fetchFontInfo() {
+      const res = await fetch('/api/font/info', { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        setFontInfo(data);
+      } else {
+        setFontInfo(null);
+      }
+    }
+
     if (user) {
       fetchProfile();
+      fetchFontInfo();
     }
   }, [user]);
 
@@ -51,6 +66,40 @@ function ProfilePage({ user }) {
     } catch (err) {
       setUploadStatus('Error: ' + err.message);
     }
+  };
+
+  const handleGenerateFont = async (regenerate = false) => {
+    try {
+      setGeneratingFont(true);
+      setFontStatus('Generating font...');
+
+      const res = await fetch('/api/font/generate', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ regenerate }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || data.message || 'Font generation failed');
+      }
+
+      setFontInfo(data);
+      setFontStatus(`Font generated successfully! ${data.characterCount} characters included.`);
+    } catch (err) {
+      setFontStatus('Error: ' + err.message);
+    } finally {
+      setGeneratingFont(false);
+    }
+  };
+
+  const downloadFont = (format) => {
+    if (!user) return;
+    window.open(`/api/font/download/${user.id}/${format}`, '_blank');
   };
 
   if (!user) {
@@ -132,6 +181,104 @@ function ProfilePage({ user }) {
           <p className="text-gray-500 text-sm mt-4">
             💡 Tip: You can draw more characters or re-upload a new sheet to update your samples.
           </p>
+        </div>
+      )}
+
+      {availableChars.length > 0 && (
+        <div className="card">
+          <div className="flex items-start gap-4">
+            <div className="flex-shrink-0 w-12 h-12 bg-primary-100 text-primary-700 rounded-full flex items-center justify-center text-xl font-bold">
+              3
+            </div>
+            <div className="flex-1">
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">Generate Your Font</h3>
+              <p className="text-gray-600 mb-4">
+                Create an installable font from your handwriting that you can use on your computer or website!
+              </p>
+
+              {!fontInfo ? (
+                <div>
+                  <button
+                    onClick={() => handleGenerateFont(false)}
+                    disabled={generatingFont}
+                    className="btn btn-primary"
+                  >
+                    {generatingFont ? '⏳ Generating...' : '✨ Generate Font'}
+                  </button>
+                  {fontStatus && (
+                    <p className={`mt-3 text-sm ${fontStatus.startsWith('Error') ? 'text-red-600' : 'text-green-600'}`}>
+                      {fontStatus}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <h4 className="font-semibold text-green-900 mb-2">Font Ready!</h4>
+                    <p className="text-sm text-green-700">
+                      Font Family: <span className="font-mono font-semibold">{fontInfo.familyName}</span>
+                    </p>
+                    <p className="text-sm text-green-700">
+                      {fontInfo.characterCount} characters included
+                    </p>
+                    {fontInfo.skippedCharacters && fontInfo.skippedCharacters.length > 0 && (
+                      <p className="text-xs text-green-600 mt-2">
+                        ⚠️ {fontInfo.skippedCharacters.length} image-based characters skipped: {fontInfo.skippedCharacters.join(', ')}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap gap-3">
+                    <button
+                      onClick={() => downloadFont('ttf')}
+                      className="btn btn-primary"
+                    >
+                      💾 Download TTF (Desktop)
+                    </button>
+                    <button
+                      onClick={() => downloadFont('woff2')}
+                      className="btn btn-secondary"
+                    >
+                      🌐 Download WOFF2 (Web)
+                    </button>
+                    <button
+                      onClick={() => handleGenerateFont(true)}
+                      disabled={generatingFont}
+                      className="btn btn-outline"
+                    >
+                      {generatingFont ? '⏳ Regenerating...' : '🔄 Regenerate'}
+                    </button>
+                  </div>
+
+                  {fontStatus && (
+                    <p className={`text-sm ${fontStatus.startsWith('Error') ? 'text-red-600' : 'text-green-600'}`}>
+                      {fontStatus}
+                    </p>
+                  )}
+
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
+                    <h4 className="font-semibold text-blue-900 mb-2">How to Install</h4>
+                    <div className="text-sm text-blue-700 space-y-2">
+                      <p><strong>Desktop (Windows/Mac/Linux):</strong></p>
+                      <ol className="list-decimal ml-5 space-y-1">
+                        <li>Download the TTF file</li>
+                        <li>Double-click the file to open it</li>
+                        <li>Click "Install" button</li>
+                        <li>Use it in Word, Photoshop, or any application!</li>
+                      </ol>
+                      <p className="mt-3"><strong>Web Usage:</strong></p>
+                      <ol className="list-decimal ml-5 space-y-1">
+                        <li>Download the WOFF2 file</li>
+                        <li>Upload to your website server</li>
+                        <li>Add @font-face CSS rule</li>
+                        <li>Apply the font to your text elements</li>
+                      </ol>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>
