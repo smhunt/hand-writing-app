@@ -5,7 +5,6 @@ import RegisterPage from './pages/RegisterPage';
 import ProfilePage from './pages/ProfilePage';
 import ComposePage from './pages/ComposePage';
 import DrawPage from './pages/DrawPage';
-import './App.css';
 
 function App() {
   const [user, setUser] = useState(null);
@@ -28,27 +27,38 @@ function App() {
   };
 
   return (
-    <div className="App">
-      <nav className="navbar">
-        <h1>Handwritten Note App</h1>
-        <ul className="nav-menu">
-          {user ? (
-            <>
-              <li><Link to="/profile">Profile</Link></li>
-              <li><Link to="/compose">Compose Note</Link></li>
-              <li><Link to="/draw">Draw Characters</Link></li>
-              <li><button onClick={handleLogout} className="logout-btn">Logout ({user.username})</button></li>
-            </>
-          ) : (
-            <>
-              <li><Link to="/login">Login</Link></li>
-              <li><Link to="/register">Register</Link></li>
-            </>
-          )}
-        </ul>
+    <div className="min-h-screen flex flex-col bg-gray-50">
+      <nav className="bg-gradient-to-r from-primary-700 to-primary-900 text-white shadow-lg">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <h1 className="text-2xl font-bold font-handwriting">✍️ Handwritten Notes</h1>
+            <ul className="flex gap-6 items-center">
+              {user ? (
+                <>
+                  <li><Link to="/profile" className="hover:text-primary-200 transition-colors">Profile</Link></li>
+                  <li><Link to="/compose" className="hover:text-primary-200 transition-colors">Compose Note</Link></li>
+                  <li><Link to="/draw" className="hover:text-primary-200 transition-colors">Draw Characters</Link></li>
+                  <li>
+                    <button
+                      onClick={handleLogout}
+                      className="bg-white text-primary-700 px-4 py-2 rounded-lg font-medium hover:bg-primary-50 transition-colors"
+                    >
+                      Logout ({user.username})
+                    </button>
+                  </li>
+                </>
+              ) : (
+                <>
+                  <li><Link to="/login" className="hover:text-primary-200 transition-colors">Login</Link></li>
+                  <li><Link to="/register" className="btn-primary">Get Started</Link></li>
+                </>
+              )}
+            </ul>
+          </div>
+        </div>
       </nav>
 
-      <main className="main-content">
+      <main className="flex-1 page-container">
         <Routes>
           <Route path="/" element={<ProfilePage user={user} />} />
           <Route path="/login" element={<LoginPage onLogin={handleLoginSuccess} />} />

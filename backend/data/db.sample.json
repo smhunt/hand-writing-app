@@ -1,0 +1,43 @@
+{
+  "users": [
+    {
+      "id": "sample-user-id-123",
+      "username": "demo",
+      "passwordHash": "$2b$10$XYZ123example.hash.here.demo.user.password",
+      "profile": {
+        "letters": {
+          "H": {
+            "type": "image",
+            "fileName": "H.png"
+          },
+          "E": {
+            "type": "image",
+            "fileName": "E.png"
+          },
+          "L": {
+            "type": "image",
+            "fileName": "L.png"
+          },
+          "O": {
+            "type": "image",
+            "fileName": "O.png"
+          },
+          "A": {
+            "type": "vector",
+            "strokes": [
+              [
+                { "x": 20, "y": 50 },
+                { "x": 40, "y": 10 },
+                { "x": 60, "y": 50 }
+              ],
+              [
+                { "x": 30, "y": 35 },
+                { "x": 50, "y": 35 }
+              ]
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

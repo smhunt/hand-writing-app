@@ -41,42 +41,80 @@ function ComposePage({ user }) {
 
   if (!user) {
     return (
-      <div className="page">
-        <p>Please log in to compose a note.</p>
+      <div className="card max-w-md mx-auto text-center">
+        <p className="text-gray-600">Please log in to compose a note.</p>
+        <a href="/login" className="btn btn-primary mt-4 inline-block">Go to Login</a>
       </div>
     );
   }
 
   return (
-    <div className="page ComposePage">
-      <h2>Compose a Handwritten Note</h2>
+    <div className="animate-fade-in space-y-6">
+      <h2 className="page-title">Compose a Handwritten Note</h2>
 
-      <div>
-        <textarea
-          rows="5"
-          cols="60"
-          value={text}
-          onChange={e => setText(e.target.value)}
-          placeholder="Type your message here..."
-        />
+      <div className="card">
+        <div className="space-y-4">
+          <div>
+            <label className="label">Your Message</label>
+            <textarea
+              rows="8"
+              value={text}
+              onChange={e => setText(e.target.value)}
+              placeholder="Type your message here..."
+              className="input resize-none font-mono"
+            />
+            <p className="text-sm text-gray-500 mt-1">
+              {text.length} characters
+            </p>
+          </div>
+
+          <div>
+            <label className="label">Paper Size</label>
+            <select
+              value={paperSize}
+              onChange={e => setPaperSize(e.target.value)}
+              className="input"
+            >
+              <option value="Letter">Letter (8.5" × 11")</option>
+              <option value="A4">A4 (210mm × 297mm)</option>
+            </select>
+          </div>
+
+          <button
+            onClick={handleGenerate}
+            className="btn btn-primary w-full"
+            disabled={!text}
+          >
+            ✨ Generate PDF
+          </button>
+
+          {status && (
+            <p className={`text-sm text-center ${status.startsWith('Error') ? 'text-red-600' : 'text-green-600'}`}>
+              {status}
+            </p>
+          )}
+        </div>
       </div>
-
-      <div>
-        <label>Paper Size: </label>
-        <select value={paperSize} onChange={e => setPaperSize(e.target.value)}>
-          <option value="Letter">Letter (8.5x11)</option>
-          <option value="A4">A4 (210x297mm)</option>
-        </select>
-      </div>
-
-      <button onClick={handleGenerate}>Generate PDF</button>
-
-      {status && <p>{status}</p>}
 
       {pdfUrl && (
-        <div className="preview">
-          <iframe title="PDF Preview" src={pdfUrl} width="600" height="800"></iframe>
-          <p><a href={pdfUrl} download="handwritten_note.pdf">Download PDF</a></p>
+        <div className="card">
+          <h3 className="text-xl font-semibold text-gray-900 mb-4">Preview & Download</h3>
+          <div className="bg-gray-100 rounded-lg p-4">
+            <iframe
+              title="PDF Preview"
+              src={pdfUrl}
+              className="w-full h-[600px] border-0 rounded"
+            />
+          </div>
+          <div className="mt-4 text-center">
+            <a
+              href={pdfUrl}
+              download="handwritten_note.pdf"
+              className="btn btn-primary inline-flex items-center gap-2"
+            >
+              📥 Download PDF
+            </a>
+          </div>
         </div>
       )}
     </div>

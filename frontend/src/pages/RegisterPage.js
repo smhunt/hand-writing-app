@@ -30,30 +30,41 @@ function RegisterPage({ onRegister }) {
   };
 
   return (
-    <div className="page RegisterPage">
-      <h2>Register</h2>
-      <form onSubmit={submit}>
-        <div>
-          <label>Choose Username:</label>
-          <input
-            type="text"
-            value={username}
-            onChange={e => setUsername(e.target.value)}
-            required
-          />
-        </div>
-        <div>
-          <label>Choose Password:</label>
-          <input
-            type="password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            required
-          />
-        </div>
-        <button type="submit">Sign Up</button>
-        {error && <p className="error">{error}</p>}
-      </form>
+    <div className="max-w-md mx-auto animate-fade-in">
+      <div className="card">
+        <h2 className="text-3xl font-bold text-gray-900 mb-2 text-center">Create Account</h2>
+        <p className="text-gray-600 text-center mb-6">Start creating personalized handwritten notes</p>
+        <form onSubmit={submit} className="space-y-4">
+          <div>
+            <label className="label">Choose Username</label>
+            <input
+              type="text"
+              value={username}
+              onChange={e => setUsername(e.target.value)}
+              required
+              className="input"
+              placeholder="Pick a unique username"
+            />
+          </div>
+          <div>
+            <label className="label">Choose Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              required
+              minLength="6"
+              className="input"
+              placeholder="At least 6 characters"
+            />
+          </div>
+          <button type="submit" className="btn btn-primary w-full">Sign Up</button>
+          {error && <p className="text-red-600 text-sm mt-2 text-center">{error}</p>}
+        </form>
+        <p className="mt-4 text-center text-gray-600 text-sm">
+          Already have an account? <a href="/login" className="text-primary-600 hover:text-primary-700 font-medium">Log in</a>
+        </p>
+      </div>
     </div>
   );
 }

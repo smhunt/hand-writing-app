@@ -40,20 +40,36 @@ function DrawPage({ user }) {
 
   if (!user) {
     return (
-      <div className="page">
-        <p>Please log in to draw your characters.</p>
+      <div className="card max-w-md mx-auto text-center">
+        <p className="text-gray-600">Please log in to draw your characters.</p>
+        <a href="/login" className="btn btn-primary mt-4 inline-block">Go to Login</a>
       </div>
     );
   }
 
   return (
-    <div className="page DrawPage">
-      <h2>Draw Your Characters</h2>
-      <p>Draw the character "<strong>{currentChar}</strong>" in the box below with your mouse or touch. When you are satisfied, click Save. Then proceed to the next character.</p>
+    <div className="animate-fade-in space-y-6">
+      <h2 className="page-title">Draw Your Characters</h2>
 
-      <Canvas char={currentChar} onSave={handleSave} onNext={nextChar} />
+      <div className="card">
+        <div className="text-center mb-6">
+          <p className="text-gray-600 mb-2">Draw this character:</p>
+          <div className="inline-block bg-gradient-to-br from-primary-100 to-primary-200 rounded-2xl p-8 shadow-lg">
+            <span className="text-6xl font-bold text-primary-800">{currentChar}</span>
+          </div>
+          <p className="text-sm text-gray-500 mt-4">
+            Use your mouse or touch to draw in the box below. When satisfied, click Save and move to the next character.
+          </p>
+        </div>
 
-      {status && <p>{status}</p>}
+        <Canvas char={currentChar} onSave={handleSave} onNext={nextChar} />
+
+        {status && (
+          <p className={`text-center mt-4 ${status.startsWith('Error') ? 'text-red-600' : 'text-green-600'} font-medium`}>
+            {status}
+          </p>
+        )}
+      </div>
     </div>
   );
 }

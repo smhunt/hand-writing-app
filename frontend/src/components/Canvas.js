@@ -106,10 +106,10 @@ function Canvas({ char, onSave, onNext }) {
   };
 
   return (
-    <div className="CanvasDraw">
+    <div className="flex flex-col items-center">
       <canvas
         ref={canvasRef}
-        style={{ border: '2px solid #282c34', borderRadius: '4px' }}
+        className="border-2 border-primary-600 rounded-lg shadow-md cursor-crosshair touch-none bg-white"
         onMouseDown={handlePointerDown}
         onMouseMove={handlePointerMove}
         onMouseUp={handlePointerUp}
@@ -127,10 +127,16 @@ function Canvas({ char, onSave, onNext }) {
           handlePointerUp();
         }}
       />
-      <div className="canvas-controls">
-        <button onClick={saveCharacter}>Save {char}</button>
-        <button onClick={handleClear}>Clear</button>
-        <button onClick={nextCharacter}>Next</button>
+      <div className="flex gap-3 mt-6">
+        <button onClick={saveCharacter} className="btn btn-primary">
+          💾 Save {char}
+        </button>
+        <button onClick={handleClear} className="btn btn-secondary">
+          🗑️ Clear
+        </button>
+        <button onClick={nextCharacter} className="btn btn-accent">
+          ➡️ Next
+        </button>
       </div>
     </div>
   );

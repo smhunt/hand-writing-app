@@ -30,30 +30,39 @@ function LoginPage({ onLogin }) {
   };
 
   return (
-    <div className="page LoginPage">
-      <h2>Login</h2>
-      <form onSubmit={submit}>
-        <div>
-          <label>Username:</label>
-          <input
-            type="text"
-            value={username}
-            onChange={e => setUsername(e.target.value)}
-            required
-          />
-        </div>
-        <div>
-          <label>Password:</label>
-          <input
-            type="password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            required
-          />
-        </div>
-        <button type="submit">Log In</button>
-        {error && <p className="error">{error}</p>}
-      </form>
+    <div className="max-w-md mx-auto animate-fade-in">
+      <div className="card">
+        <h2 className="text-3xl font-bold text-gray-900 mb-6 text-center">Welcome Back</h2>
+        <form onSubmit={submit} className="space-y-4">
+          <div>
+            <label className="label">Username</label>
+            <input
+              type="text"
+              value={username}
+              onChange={e => setUsername(e.target.value)}
+              required
+              className="input"
+              placeholder="Enter your username"
+            />
+          </div>
+          <div>
+            <label className="label">Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              required
+              className="input"
+              placeholder="Enter your password"
+            />
+          </div>
+          <button type="submit" className="btn btn-primary w-full">Log In</button>
+          {error && <p className="text-red-600 text-sm mt-2 text-center">{error}</p>}
+        </form>
+        <p className="mt-4 text-center text-gray-600 text-sm">
+          Don't have an account? <a href="/register" className="text-primary-600 hover:text-primary-700 font-medium">Sign up</a>
+        </p>
+      </div>
     </div>
   );
 }
