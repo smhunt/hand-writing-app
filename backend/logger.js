@@ -6,6 +6,7 @@
 
 const winston = require('winston');
 const path = require('path');
+const config = require('./config');
 
 // Define log levels
 const levels = {
@@ -53,7 +54,7 @@ const transports = [
 
   // Error log file
   new winston.transports.File({
-    filename: path.join(__dirname, 'logs/error.log'),
+    filename: path.join(__dirname, config.logging.dir, 'error.log'),
     level: 'error',
     format,
     maxsize: 5242880, // 5MB
@@ -62,7 +63,7 @@ const transports = [
 
   // Combined log file
   new winston.transports.File({
-    filename: path.join(__dirname, 'logs/combined.log'),
+    filename: path.join(__dirname, config.logging.dir, 'combined.log'),
     format,
     maxsize: 5242880, // 5MB
     maxFiles: 5,
@@ -71,7 +72,7 @@ const transports = [
 
 // Create logger
 const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || 'info',
+  level: config.logging.level,
   levels,
   format,
   transports,
@@ -80,7 +81,7 @@ const logger = winston.createLogger({
 
 // Create logs directory if it doesn't exist
 const fs = require('fs');
-const logsDir = path.join(__dirname, 'logs');
+const logsDir = path.join(__dirname, config.logging.dir);
 if (!fs.existsSync(logsDir)) {
   fs.mkdirSync(logsDir, { recursive: true });
 }

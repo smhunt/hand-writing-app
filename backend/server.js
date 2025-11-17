@@ -1,11 +1,15 @@
 const express = require('express');
 const session = require('express-session');
 const cookieParser = require('cookie-parser');
+const cors = require('cors');
+const helmet = require('helmet');
 const path = require('path');
 
+const config = require('./config');
 const logger = require('./logger');
 const { requestLogger, addRequestTime } = require('./middleware/requestLogger');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
+const { apiLimiter } = require('./middleware/rateLimiter');
 
 const authRoutes = require('./auth');
 const profileRoutes = require('./profile');
@@ -13,21 +17,66 @@ const generateRoutes = require('./generate');
 
 // Initialize Express
 const app = express();
-const PORT = process.env.PORT || 5000;
+
+// Security headers (Helmet)
+if (config.isProduction) {
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrc: ["'self'"],
+        imgSrc: ["'self'", "data:", "https:"],
+      },
+    },
+    hsts: {
+      maxAge: 31536000, // 1 year
+      includeSubDomains: true,
+      preload: true,
+    },
+  }));
+  logger.info('Production security headers enabled');
+} else {
+  // Development mode - relaxed security headers
+  app.use(helmet({
+    contentSecurityPolicy: false,
+  }));
+}
 
 // Request timing and logging
 app.use(addRequestTime);
 app.use(requestLogger);
+
+// CORS middleware
+if (config.cors.enabled) {
+  app.use(cors({
+    origin: config.cors.origin,
+    credentials: config.cors.credentials,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  }));
+  logger.info(`CORS enabled for origins: ${config.cors.origin.join(', ')}`);
+}
+
+// Rate limiting (before body parsing to save resources)
+if (config.rateLimit.enabled) {
+  app.use('/api', apiLimiter);
+  logger.info(`Rate limiting enabled: ${config.rateLimit.maxRequests} requests per ${config.rateLimit.windowMs / 1000}s`);
+}
 
 // Body parsing middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'keyboard cat',
+  secret: config.session.secret,
   resave: false,
   saveUninitialized: false,
-  // In production, use secure cookies, set cookie domain, etc.
+  cookie: {
+    secure: config.session.secure,
+    httpOnly: true,
+    maxAge: config.session.cookieMaxAge,
+  },
 }));
 
 app.use(function(req, res, next) {
@@ -48,9 +97,22 @@ app.use('/api', authRoutes);
 app.use('/api', profileRoutes);
 app.use('/api', generateRoutes);
 
-// Basic health check endpoint
+// Enhanced health check endpoint
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK' });
+  const healthcheck = {
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: config.env,
+    memory: {
+      total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024) + ' MB',
+      used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + ' MB',
+      external: Math.round(process.memoryUsage().external / 1024 / 1024) + ' MB',
+    },
+    cpu: process.cpuUsage(),
+  };
+
+  res.status(200).json(healthcheck);
 });
 
 // Error handling middleware (must be last)
@@ -59,9 +121,10 @@ app.use(errorHandler);
 
 // Start server only if not being required for testing
 if (require.main === module) {
-  app.listen(PORT, () => {
-    logger.info(`Backend server listening on port ${PORT}`);
-    logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  app.listen(config.server.port, config.server.host, () => {
+    logger.info(`Backend server listening on ${config.server.host}:${config.server.port}`);
+    logger.info(`Environment: ${config.env}`);
+    logger.info(`HTTPS enabled: ${config.security.enableHttps}`);
   });
 }
 

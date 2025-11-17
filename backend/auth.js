@@ -1,11 +1,12 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
 const { getUserByUsername, createUser } = require('./storage');
+const { loginLimiter, registerLimiter } = require('./middleware/rateLimiter');
 
 const router = express.Router();
 
 // Register a new user
-router.post('/register', async (req, res) => {
+router.post('/register', registerLimiter, async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password required' });
@@ -31,7 +32,7 @@ router.post('/register', async (req, res) => {
 });
 
 // Login an existing user
-router.post('/login', async (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
   const { username, password } = req.body;
   const user = getUserByUsername(username);
 

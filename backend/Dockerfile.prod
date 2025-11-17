@@ -1,0 +1,72 @@
+# Production Dockerfile for Backend
+# Multi-stage build for optimized image size
+
+# Stage 1: Dependencies
+FROM node:18-alpine AS dependencies
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install production dependencies only
+RUN npm ci --only=production
+
+# Stage 2: Build
+FROM node:18-alpine AS build
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install all dependencies (including dev)
+RUN npm ci
+
+# Copy source code
+COPY . .
+
+# Stage 3: Production
+FROM node:18-alpine
+
+# Install Python and OpenCV dependencies
+RUN apk add --no-cache \
+    python3 \
+    py3-pip \
+    py3-numpy \
+    opencv \
+    && ln -sf python3 /usr/bin/python
+
+# Create app directory
+WORKDIR /app
+
+# Copy production node_modules from dependencies stage
+COPY --from=dependencies /app/node_modules ./node_modules
+
+# Copy application code
+COPY --from=build /app .
+
+# Install Python dependencies
+COPY requirements.txt ./
+RUN pip3 install --no-cache-dir -r requirements.txt
+
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
+
+# Create necessary directories with correct permissions
+RUN mkdir -p data/uploads logs public && \
+    chown -R nodejs:nodejs /app
+
+# Switch to non-root user
+USER nodejs
+
+# Expose port
+EXPOSE 7000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
+    CMD node -e "require('http').get('http://localhost:7000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+
+# Start application
+CMD ["node", "server.js"]

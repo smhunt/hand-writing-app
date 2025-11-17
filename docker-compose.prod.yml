@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: handwriting-backend-prod
+    restart: unless-stopped
+    ports:
+      - "7000:7000"
+    environment:
+      - NODE_ENV=production
+      - PORT=7000
+      - HOST=0.0.0.0
+      - USE_PYTHON_OPENCV=true
+      - LOG_LEVEL=info
+      - SESSION_SECRET=${SESSION_SECRET}
+      - CORS_ORIGIN=https://yourdomain.com
+      - ENABLE_HTTPS=true
+      - ENABLE_RATE_LIMIT=true
+    volumes:
+      - backend-data:/app/data
+      - backend-logs:/app/logs
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:7000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    container_name: handwriting-frontend-prod
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  backend-data:
+    driver: local
+  backend-logs:
+    driver: local
+
+networks:
+  app-network:
+    driver: bridge
