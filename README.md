@@ -9,6 +9,7 @@ Transform your handwriting into personalized digital notes! This full-stack web 
 - **Compose Handwritten Notes**: Type a message and choose a page size; the app generates a PDF with the text rendered in your handwriting
 - **Download/Print Notes**: Preview the generated PDF and download it for printing or sharing
 - **Direct Drawing Input**: Draw characters with a mouse, finger, or stylus to add or update characters in your profile
+- **Font Generation**: Export your handwriting as installable TrueType fonts (TTF) for desktop or web fonts (WOFF2) for websites
 - **User Accounts**: Register and login to save your handwriting profile privately
 
 ## Tech Stack
@@ -18,10 +19,16 @@ Transform your handwriting into personalized digital notes! This full-stack web 
 - **Multer** - File upload handling
 - **OpenCV (Python)** - Image processing and character segmentation
 - **PDFKit** - PDF generation and template creation
+- **opentype.js** - TTF/OTF font generation
+- **ttf2woff2** - Web font format conversion
+- **simplify-js** - Path smoothing and optimization
 - **bcrypt** - Password hashing
 - **Express Sessions** - User authentication
 - **Winston** - Production logging
 - **Morgan** - HTTP request logging
+- **Helmet** - Security headers
+- **CORS** - Cross-origin resource sharing
+- **express-rate-limit** - API protection
 
 ### Frontend
 - **React** - User interface
@@ -157,7 +164,14 @@ Navigate to the Compose page. Type your message in the text box, choose a paper 
 ### 6. Preview & Download
 A preview of the generated PDF will be shown. Download the PDF to see your message rendered in your handwriting!
 
-### 7. Draw Characters (Optional)
+### 7. Generate Your Font (New!)
+Return to the Profile page and click "Generate Font" to create installable TrueType (TTF) and web (WOFF2) fonts from your handwriting.
+- **Desktop Use**: Download the TTF file and install it on Windows, Mac, or Linux to use in Word, Photoshop, and other applications
+- **Web Use**: Download the WOFF2 file and embed it on your website with the provided CSS
+
+**Note**: Only vector-drawn characters are included in fonts. Image-based characters from uploaded templates are automatically skipped.
+
+### 8. Draw Characters (Optional)
 If you prefer to draw characters or need to correct any, go to the Draw page. Select a character, draw it on the canvas, and save. This will update that character in your profile.
 
 ## Project Structure
@@ -167,6 +181,7 @@ hand-writing-app/
 ├── README.md
 ├── CONTRIBUTING.md
 ├── docker-compose.yml
+├── docker-compose.prod.yml     # Production deployment config
 ├── .claude/                    # Claude Code infrastructure
 │   ├── PROJECT_CONTEXT.md
 │   ├── AGENT_GUIDE.md
@@ -177,9 +192,11 @@ hand-writing-app/
 │   └── memory/
 ├── backend/
 │   ├── Dockerfile
+│   ├── Dockerfile.prod         # Production multi-stage build
 │   ├── package.json
 │   ├── requirements.txt        # Python dependencies
 │   ├── server.js
+│   ├── config.js               # Centralized configuration
 │   ├── logger.js               # Winston logging
 │   ├── auth.js
 │   ├── profile.js
@@ -187,13 +204,19 @@ hand-writing-app/
 │   ├── handwriting.js
 │   ├── storage.js
 │   ├── segment_chars.py        # Python OpenCV script
+│   ├── fontGenerator.js        # Font generation module
+│   ├── fontUtils.js            # Font utilities and Unicode mapping
+│   ├── routes/
+│   │   └── font.js             # Font API endpoints
 │   ├── middleware/
 │   │   ├── errorHandler.js
-│   │   └── requestLogger.js
+│   │   ├── requestLogger.js
+│   │   └── rateLimiter.js      # Rate limiting middleware
 │   ├── logs/                   # Application logs
 │   ├── data/
 │   │   ├── db.json
 │   │   ├── uploads/
+│   │   ├── fonts/              # Generated font files
 │   │   └── samples/
 │   └── public/
 │       └── handwriting_template.pdf
@@ -346,6 +369,13 @@ npm test
 ### Generation
 - `POST /api/generate` - Generate handwritten PDF
 
+### Font Generation
+- `POST /api/font/generate` - Generate font from handwriting (TTF + WOFF2)
+- `GET /api/font/info` - Get font metadata and character coverage
+- `GET /api/font/download/:userId/:format` - Download font (format: ttf or woff2)
+- `GET /api/font/css/:userId` - Get @font-face CSS for web usage
+- `DELETE /api/font` - Delete user's generated fonts
+
 ## Completed Features ✨
 
 - ✅ Full backend API with authentication
@@ -354,19 +384,25 @@ npm test
 - ✅ Python OpenCV character segmentation
 - ✅ PDF generation with handwriting rendering
 - ✅ Canvas-based character drawing
+- ✅ **Font generation (TTF/WOFF2 export)**
 - ✅ User authentication and sessions
 - ✅ Production logging with Winston
 - ✅ Error handling middleware
+- ✅ Security headers (Helmet) and CORS
+- ✅ API rate limiting
+- ✅ Centralized configuration system
 - ✅ Marketing landing page
 - ✅ Comprehensive documentation
-- ✅ Docker containerization
+- ✅ Docker containerization (development + production)
 - ✅ Test suite
 - ✅ Claude Code development infrastructure
 
 ## Future Enhancements
 
 - [ ] Multiple handwriting styles per user
-- [ ] Font generation (TTF export)
+- [ ] Font kerning and ligatures
+- [ ] Multiple font weights (Light, Regular, Bold)
+- [ ] Image-to-vector conversion for uploaded characters
 - [ ] Collaborative notes (multiple handwriting styles)
 - [ ] Mobile app version
 - [ ] Cloud storage integration (AWS S3, Cloudflare R2)
@@ -375,10 +411,9 @@ npm test
 - [ ] Handwriting style customization (slant, spacing, size)
 - [ ] Custom template layouts
 - [ ] Email verification and password reset
-- [ ] OAuth social login
+- [ ] OAuth social login (Auth0)
 - [ ] Export to various formats (PNG, SVG, etc.)
 - [ ] Batch PDF generation
-- [ ] API rate limiting
 - [ ] WebSocket for real-time updates
 
 ## License
