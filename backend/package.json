@@ -1,8 +1,25 @@
 {
   "name": "handwritten-app-backend",
   "version": "1.0.0",
-  "description": "Backend for Handwritten Note Web App",
+  "description": "Backend API for Handwritten Note Web App - Transform your handwriting into personalized digital notes and TrueType fonts",
   "main": "server.js",
+  "keywords": [
+    "handwriting",
+    "font-generation",
+    "ttf",
+    "woff2",
+    "opentype",
+    "pdf-generation",
+    "opencv",
+    "character-recognition",
+    "personalization"
+  ],
+  "author": "Sean Hunt",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/smhunt/hand-writing-app"
+  },
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
