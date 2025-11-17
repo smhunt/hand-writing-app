@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    image: handwritten-app-backend:latest
+    container_name: handwritten_app_backend
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=development
+      - PORT=5000
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./backend:/app:rw
+      - ./backend/data:/app/data:rw
+    # If OpenCV requires shared memory or other device access, configure here
+
+  frontend:
+    build: ./frontend
+    image: handwritten-app-frontend:latest
+    container_name: handwritten_app_frontend
+    restart: unless-stopped
+    environment:
+      - CHOKIDAR_USEPOLLING=true  # for hot-reload in Docker
+      - PORT=3000
+      - REACT_APP_API_URL=http://localhost:5000/api  # the backend API base URL
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app:rw
+      - /app/node_modules  # prevent node_modules from being overridden
+    stdin_open: true
+    tty: true
+    depends_on:
+      - backend
