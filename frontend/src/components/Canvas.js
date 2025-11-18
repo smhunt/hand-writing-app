@@ -94,6 +94,11 @@ function Canvas({ char, onSave, onNext }) {
   };
 
   const nextCharacter = () => {
+    // Auto-save if there are strokes drawn
+    if (strokes.length > 0) {
+      onSave(char, strokes);
+    }
+
     // Clear for next char
     setStrokes([]);
     clearCanvas();

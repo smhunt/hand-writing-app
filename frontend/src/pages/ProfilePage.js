@@ -1,11 +1,24 @@
 import React, { useEffect, useState } from 'react';
+import DrawModal from '../components/DrawModal';
 
 function ProfilePage({ user }) {
   const [uploadStatus, setUploadStatus] = useState(null);
   const [availableChars, setAvailableChars] = useState([]);
+  const [characterData, setCharacterData] = useState({});
+  const [stats, setStats] = useState({ total: 0, vector: 0, image: 0 });
   const [fontInfo, setFontInfo] = useState(null);
   const [fontStatus, setFontStatus] = useState(null);
   const [generatingFont, setGeneratingFont] = useState(false);
+  const [drawModalOpen, setDrawModalOpen] = useState(false);
+  const [selectedChar, setSelectedChar] = useState(null);
+
+  // Define all expected characters
+  const allCharacters = {
+    'Uppercase': 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split(''),
+    'Lowercase': 'abcdefghijklmnopqrstuvwxyz'.split(''),
+    'Numbers': '0123456789'.split(''),
+    'Symbols': '.,!?;:\'"()-'.split('')
+  };
 
   useEffect(() => {
     // Fetch profile info (which chars are available)
@@ -14,6 +27,8 @@ function ProfilePage({ user }) {
       if (res.ok) {
         const data = await res.json();
         setAvailableChars(data.letters || []);
+        setCharacterData(data.characterData || {});
+        setStats(data.stats || { total: 0, vector: 0, image: 0 });
       }
     }
 
@@ -37,6 +52,49 @@ function ProfilePage({ user }) {
   const downloadTemplate = () => {
     // Simply navigate to the template download endpoint
     window.open('/api/template', '_blank');
+  };
+
+  const openDrawModal = (char) => {
+    setSelectedChar(char);
+    setDrawModalOpen(true);
+  };
+
+  const closeDrawModal = () => {
+    setDrawModalOpen(false);
+    setSelectedChar(null);
+  };
+
+  const handleCharacterSaved = async (savedChar) => {
+    // Refetch profile data to update stats
+    const res = await fetch('/api/profile', { credentials: 'include' });
+    if (res.ok) {
+      const data = await res.json();
+      setAvailableChars(data.letters || []);
+      setCharacterData(data.characterData || {});
+      setStats(data.stats || { total: 0, vector: 0, image: 0 });
+
+      // Find next incomplete character for auto-advance
+      const allChars = Object.values(allCharacters).flat();
+      const currentIndex = allChars.indexOf(savedChar);
+
+      // Look for next incomplete character after current one
+      const remaining = allChars.slice(currentIndex + 1).find(c => !data.letters.includes(c));
+
+      if (remaining) {
+        // Auto-advance to next incomplete character
+        setSelectedChar(remaining);
+      } else {
+        // Look from the beginning
+        const fromStart = allChars.find(c => !data.letters.includes(c));
+        if (fromStart) {
+          setSelectedChar(fromStart);
+        } else {
+          // All complete!
+          setDrawModalOpen(false);
+          alert('🎉 Congratulations! You\'ve completed all 73 characters!');
+        }
+      }
+    }
   };
 
   const handleUpload = async (event) => {
@@ -111,9 +169,108 @@ function ProfilePage({ user }) {
     );
   }
 
+  const totalPossible = Object.values(allCharacters).flat().length;
+  const completionPercent = totalPossible > 0 ? Math.round((stats.total / totalPossible) * 100) : 0;
+
   return (
     <div className="animate-fade-in space-y-6">
       <h2 className="page-title">Your Handwriting Profile</h2>
+
+      {/* Progress Tracker */}
+      <div className="card">
+        <h3 className="text-xl font-semibold text-gray-900 mb-4">Training Progress</h3>
+
+        {/* Stats Summary */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 text-center">
+            <div className="text-3xl font-bold text-blue-700">{stats.total}</div>
+            <div className="text-sm text-blue-600 mt-1">Total Characters</div>
+          </div>
+          <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 text-center">
+            <div className="text-3xl font-bold text-green-700">{stats.vector}</div>
+            <div className="text-sm text-green-600 mt-1">Drawn (Vector)</div>
+          </div>
+          <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 text-center">
+            <div className="text-3xl font-bold text-purple-700">{stats.image}</div>
+            <div className="text-sm text-purple-600 mt-1">Uploaded (Image)</div>
+          </div>
+          <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg p-4 text-center">
+            <div className="text-3xl font-bold text-orange-700">{completionPercent}%</div>
+            <div className="text-sm text-orange-600 mt-1">Complete</div>
+          </div>
+        </div>
+
+        {/* Progress Bar */}
+        <div className="mb-6">
+          <div className="flex justify-between text-sm text-gray-600 mb-2">
+            <span>{stats.total} / {totalPossible} characters</span>
+            <span>{completionPercent}%</span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-3">
+            <div
+              className="bg-gradient-to-r from-primary-500 to-accent-500 h-3 rounded-full transition-all duration-500"
+              style={{ width: `${completionPercent}%` }}
+            ></div>
+          </div>
+        </div>
+
+        {/* Character Grid by Category */}
+        {Object.entries(allCharacters).map(([category, chars]) => (
+          <div key={category} className="mb-6 last:mb-0">
+            <h4 className="text-sm font-semibold text-gray-700 mb-3">{category}</h4>
+            <div className="grid grid-cols-10 sm:grid-cols-13 md:grid-cols-18 lg:grid-cols-26 gap-2">
+              {chars.map(char => {
+                const charInfo = characterData[char];
+                const isComplete = charInfo && charInfo.hasData;
+                const isVector = charInfo && charInfo.type === 'vector';
+                const isImage = charInfo && charInfo.type === 'image';
+
+                return (
+                  <button
+                    key={char}
+                    onClick={() => openDrawModal(char)}
+                    className={`
+                      relative aspect-square rounded-lg border-2 flex items-center justify-center text-sm font-medium
+                      transition-all duration-200 hover:scale-110 cursor-pointer
+                      ${isComplete
+                        ? isVector
+                          ? 'bg-green-100 border-green-400 text-green-800 hover:bg-green-200'
+                          : 'bg-purple-100 border-purple-400 text-purple-800 hover:bg-purple-200'
+                        : 'bg-gray-50 border-gray-300 text-gray-400 hover:bg-gray-100 hover:border-primary-400'
+                      }
+                    `}
+                    title={isComplete ? `${char} - ${isVector ? 'Drawn' : 'Uploaded'} - Click to redraw` : `${char} - Click to draw`}
+                  >
+                    {char}
+                    {isComplete && (
+                      <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-white border-2 border-current flex items-center justify-center text-xs">
+                        {isVector ? '✏️' : '📷'}
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+
+        <div className="mt-6 pt-4 border-t border-gray-200">
+          <div className="flex items-start gap-3 text-sm text-gray-600">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded bg-green-100 border-2 border-green-400 flex items-center justify-center text-xs">A</div>
+              <span>Drawn (vector, works in fonts)</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded bg-purple-100 border-2 border-purple-400 flex items-center justify-center text-xs">A</div>
+              <span>Uploaded (image, skipped in fonts)</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded bg-gray-50 border-2 border-gray-300 flex items-center justify-center text-xs text-gray-400">A</div>
+              <span>Not completed</span>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div className="card">
         <div className="flex items-start gap-4">
@@ -281,6 +438,13 @@ function ProfilePage({ user }) {
           </div>
         </div>
       )}
+
+      <DrawModal
+        char={selectedChar}
+        isOpen={drawModalOpen}
+        onClose={closeDrawModal}
+        onSave={handleCharacterSaved}
+      />
     </div>
   );
 }

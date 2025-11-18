@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Routes, Route, useNavigate, Link } from 'react-router-dom';
+import React from 'react';
+import { Routes, Route, Link } from 'react-router-dom';
 import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
@@ -8,31 +8,43 @@ import ComposePage from './pages/ComposePage';
 import DrawPage from './pages/DrawPage';
 
 function App() {
-  const [user, setUser] = useState(null);
-  const navigate = useNavigate();
+  const [user, setUser] = React.useState(null);
+  const [isLoading, setIsLoading] = React.useState(true);
 
-  useEffect(() => {
-    // On initial mount, check session status
-    // For simplicity, not doing an auto-login check here
+  // Check if user is logged in on mount
+  React.useEffect(() => {
+    fetch('/api/profile', { credentials: 'include' })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data) setUser(data);
+        setIsLoading(false);
+      })
+      .catch(() => setIsLoading(false));
   }, []);
-
-  const handleLoginSuccess = (userData) => {
-    setUser(userData);
-    navigate('/profile');
-  };
 
   const handleLogout = async () => {
     await fetch('/api/logout', { method: 'POST', credentials: 'include' });
     setUser(null);
-    navigate('/login');
+    window.location.href = '/';
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <Routes>
       {/* Public routes - no navbar */}
       <Route path="/" element={<LandingPage />} />
-      <Route path="/login" element={<LoginPage onLogin={handleLoginSuccess} />} />
-      <Route path="/register" element={<RegisterPage onRegister={handleLoginSuccess} />} />
+      <Route path="/login" element={<LoginPage onLogin={setUser} />} />
+      <Route path="/register" element={<RegisterPage onRegister={setUser} />} />
 
       {/* Protected routes - with navbar */}
       <Route
@@ -56,14 +68,22 @@ function App() {
                             onClick={handleLogout}
                             className="bg-white text-primary-700 px-4 py-2 rounded-lg font-medium hover:bg-primary-50 transition-colors"
                           >
-                            Logout ({user.username})
+                            Logout ({user?.email || user?.name})
                           </button>
                         </li>
                       </>
                     ) : (
                       <>
-                        <li><Link to="/login" className="hover:text-primary-200 transition-colors">Login</Link></li>
-                        <li><Link to="/register" className="btn-primary">Get Started</Link></li>
+                        <li>
+                          <Link to="/login" className="hover:text-primary-200 transition-colors">
+                            Login
+                          </Link>
+                        </li>
+                        <li>
+                          <Link to="/register" className="btn-primary">
+                            Get Started
+                          </Link>
+                        </li>
                       </>
                     )}
                   </ul>

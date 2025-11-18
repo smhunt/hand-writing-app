@@ -1,7 +1,8 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 function LandingPage() {
+  const navigate = useNavigate();
   const features = [
     {
       icon: '✍️',
@@ -80,10 +81,16 @@ function LandingPage() {
               Personal touch meets modern convenience.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center animate-slide-up">
-              <Link to="/register" className="btn btn-primary text-lg px-8 py-4">
+              <Link
+                to="/register"
+                className="btn btn-primary text-lg px-8 py-4"
+              >
                 Get Started Free
               </Link>
-              <Link to="/login" className="btn btn-secondary text-lg px-8 py-4">
+              <Link
+                to="/login"
+                className="btn btn-secondary text-lg px-8 py-4"
+              >
                 Sign In
               </Link>
             </div>
@@ -152,7 +159,10 @@ function LandingPage() {
           </div>
 
           <div className="text-center mt-12">
-            <Link to="/register" className="btn bg-white text-primary-700 hover:bg-primary-50 text-lg px-8 py-4 inline-block">
+            <Link
+              to="/register"
+              className="btn bg-white text-primary-700 hover:bg-primary-50 text-lg px-8 py-4 inline-block"
+            >
               Start Creating Now
             </Link>
           </div>
@@ -195,7 +205,10 @@ function LandingPage() {
             Join thousands of people who've rediscovered the joy of handwritten notes
             without the hassle of actually writing them by hand.
           </p>
-          <Link to="/register" className="btn bg-white text-accent-700 hover:bg-gray-100 text-lg px-10 py-5 inline-block font-semibold">
+          <Link
+            to="/register"
+            className="btn bg-white text-accent-700 hover:bg-gray-100 text-lg px-10 py-5 inline-block font-semibold"
+          >
             Create Your Free Account
           </Link>
           <p className="text-sm mt-6 opacity-75">

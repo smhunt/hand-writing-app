@@ -43,6 +43,7 @@
     "simplify-js": "^1.2.4",
     "ttf2woff2": "^8.0.0",
     "uuid": "^9.0.0",
+    "validator": "^13.15.23",
     "winston": "^3.11.0"
   },
   "devDependencies": {

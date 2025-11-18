@@ -11,13 +11,16 @@ const { requestLogger, addRequestTime } = require('./middleware/requestLogger');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
 const { apiLimiter } = require('./middleware/rateLimiter');
 
-const authRoutes = require('./auth');
+const { auth0Middleware, getUserFromAuth0 } = require('./auth0');
 const profileRoutes = require('./profile');
 const generateRoutes = require('./generate');
 const fontRoutes = require('./routes/font');
 
 // Initialize Express
 const app = express();
+
+// Trust proxy (for React dev server proxy and session cookies)
+app.set('trust proxy', 1);
 
 // Security headers (Helmet)
 if (config.isProduction) {
@@ -61,30 +64,46 @@ if (config.cors.enabled) {
 }
 
 // Rate limiting (before body parsing to save resources)
-if (config.rateLimit.enabled) {
+// Disabled in development due to proxy issues
+if (config.rateLimit.enabled && config.isProduction) {
   app.use('/api', apiLimiter);
   logger.info(`Rate limiting enabled: ${config.rateLimit.maxRequests} requests per ${config.rateLimit.windowMs / 1000}s`);
+} else if (!config.isProduction) {
+  logger.info('Rate limiting disabled in development');
 }
 
 // Body parsing middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+
+// Auth0 authentication middleware
+app.use(auth0Middleware);
+app.use(getUserFromAuth0);
+
+// Session middleware for additional session data
 app.use(session({
   secret: config.session.secret,
-  resave: false,
+  resave: true,
   saveUninitialized: false,
+  rolling: true,
   cookie: {
-    secure: config.session.secure,
+    secure: false,
     httpOnly: true,
     maxAge: config.session.cookieMaxAge,
+    sameSite: config.isProduction ? 'strict' : 'lax',
   },
+  proxy: true,
 }));
 
 app.use(function(req, res, next) {
   // Simple middleware to protect routes: if not logged in, block access to protected APIs
-  const publicPaths = ['/api/login', '/api/register', '/api/template', '/api/health'];
-  if (!publicPaths.includes(req.path) && !req.session.userId) {
+  const publicPaths = ['/api/login', '/api/logout', '/api/callback', '/api/template', '/api/health'];
+
+  // Check if user is authenticated via Auth0
+  const isAuthenticated = req.oidc && req.oidc.isAuthenticated();
+
+  if (!publicPaths.includes(req.path) && !isAuthenticated) {
     return res.status(401).json({ error: 'Not authenticated' });
   }
   next();
@@ -94,8 +113,25 @@ app.use(function(req, res, next) {
 app.use('/uploads', express.static(path.join(__dirname, 'data/uploads')));
 app.use('/static', express.static(path.join(__dirname, 'public')));
 
+// Auth0 routes are automatically handled by auth0Middleware
+// Add a profile endpoint to get current user info
+app.get('/api/user', (req, res) => {
+  if (req.oidc.isAuthenticated()) {
+    res.json({
+      user: {
+        id: req.oidc.user.sub,
+        username: req.oidc.user.email || req.oidc.user.name,
+        email: req.oidc.user.email,
+        name: req.oidc.user.name,
+        picture: req.oidc.user.picture,
+      }
+    });
+  } else {
+    res.status(401).json({ error: 'Not authenticated' });
+  }
+});
+
 // Routes
-app.use('/api', authRoutes);
 app.use('/api', profileRoutes);
 app.use('/api', generateRoutes);
 app.use('/api/font', fontRoutes);

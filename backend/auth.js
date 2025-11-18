@@ -24,7 +24,14 @@ router.post('/register', registerLimiter, async (req, res) => {
     req.session.userId = newUser.id;
     req.session.username = newUser.username;
 
-    res.json({ message: 'User registered', user: { id: newUser.id, username: newUser.username } });
+    // Explicitly save session to ensure it persists
+    req.session.save((err) => {
+      if (err) {
+        console.error('Session save error:', err);
+        return res.status(500).json({ error: 'Session error' });
+      }
+      res.json({ message: 'User registered', user: { id: newUser.id, username: newUser.username } });
+    });
   } catch (err) {
     console.error('Error registering user:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -49,7 +56,14 @@ router.post('/login', loginLimiter, async (req, res) => {
   req.session.userId = user.id;
   req.session.username = user.username;
 
-  res.json({ message: 'Login successful', user: { id: user.id, username: user.username } });
+  // Explicitly save session to ensure it persists
+  req.session.save((err) => {
+    if (err) {
+      console.error('Session save error:', err);
+      return res.status(500).json({ error: 'Session error' });
+    }
+    res.json({ message: 'Login successful', user: { id: user.id, username: user.username } });
+  });
 });
 
 // Logout (if using session-based auth)

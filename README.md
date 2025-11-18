@@ -16,14 +16,15 @@ Transform your handwriting into personalized digital notes! This full-stack web 
 
 ### Backend
 - **Node.js + Express** - REST API server
+- **Auth0** - Authentication and user management (via express-openid-connect)
 - **Multer** - File upload handling
 - **OpenCV (Python)** - Image processing and character segmentation
 - **PDFKit** - PDF generation and template creation
 - **opentype.js** - TTF/OTF font generation
 - **ttf2woff2** - Web font format conversion
 - **simplify-js** - Path smoothing and optimization
-- **bcrypt** - Password hashing
-- **Express Sessions** - User authentication
+- **Express Sessions** - Session management
+- **Validator** - Input validation and sanitization
 - **Winston** - Production logging
 - **Morgan** - HTTP request logging
 - **Helmet** - Security headers
@@ -32,6 +33,7 @@ Transform your handwriting into personalized digital notes! This full-stack web 
 
 ### Frontend
 - **React** - User interface
+- **Auth0 React SDK** - Authentication integration (@auth0/auth0-react)
 - **React Router** - Navigation
 - **Tailwind CSS** - Utility-first styling
 - **HTML5 Canvas** - Drawing interface for character capture
@@ -49,6 +51,89 @@ Transform your handwriting into personalized digital notes! This full-stack web 
   - OR -
 - **Node.js** (>=18) and npm
 - **Python 3.8+** (for OpenCV character segmentation, optional)
+- **Auth0 Account** (free tier available at https://auth0.com)
+
+### Auth0 Setup (Required)
+
+This application uses Auth0 for authentication. Follow these steps to configure Auth0:
+
+#### 1. Create Auth0 Account
+1. Go to [https://auth0.com](https://auth0.com) and sign up for a free account
+2. Create a new tenant (e.g., "handwriting-app")
+
+#### 2. Create Application
+1. In the Auth0 Dashboard, go to **Applications** → **Create Application**
+2. Name it "Handwriting App" and select **Regular Web Application**
+3. Click **Create**
+
+#### 3. Configure Application Settings
+1. In your application settings, add the following to **Allowed Callback URLs**:
+   ```
+   http://localhost:5001/api/callback
+   ```
+
+2. Add the following to **Allowed Logout URLs**:
+   ```
+   http://localhost:3000
+   ```
+
+3. Add the following to **Allowed Web Origins**:
+   ```
+   http://localhost:3000
+   ```
+
+4. Save Changes
+
+#### 4. Get Your Credentials
+Copy the following from your Auth0 application settings:
+- **Domain** (e.g., `your-tenant.auth0.com`)
+- **Client ID**
+- **Client Secret**
+
+#### 5. Configure Environment Variables
+
+**Backend** (`backend/.env`):
+```bash
+# Copy from backend/.env.example
+NODE_ENV=development
+PORT=5001
+HOST=localhost
+
+# Auth0 Configuration
+AUTH0_SECRET='your-long-random-secret-here'
+AUTH0_BASE_URL=http://localhost:5001
+AUTH0_ISSUER_BASE_URL=https://your-tenant.auth0.com
+AUTH0_CLIENT_ID=your_client_id_here
+AUTH0_CLIENT_SECRET=your_client_secret_here
+
+# Session
+SESSION_SECRET='another-long-random-secret'
+
+# CORS
+CORS_ORIGIN=http://localhost:3000
+```
+
+**Frontend** (`frontend/.env`):
+```bash
+# Copy from frontend/.env.example
+REACT_APP_AUTH0_DOMAIN=your-tenant.auth0.com
+REACT_APP_AUTH0_CLIENT_ID=your_client_id_here
+REACT_APP_AUTH0_CALLBACK_URL=http://localhost:3000
+REACT_APP_API_URL=http://localhost:5001
+```
+
+**Generating Secrets**:
+```bash
+# Generate random secrets
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+#### 6. Test Auth0 Integration
+1. Start the application (see below)
+2. Click "Get Started" or "Login"
+3. You should see the Auth0 Universal Login page
+4. Sign up with email/password or social providers
+5. After authentication, you'll be redirected back to the app
 
 ### Option 1: Running with Docker (Recommended)
 
@@ -378,14 +463,17 @@ npm test
 
 ## Completed Features ✨
 
-- ✅ Full backend API with authentication
+- ✅ **Auth0 authentication** with Universal Login
+- ✅ **Multi-font library** support (create & manage multiple fonts)
+- ✅ **Input validation** and security hardening
+- ✅ Full backend API with RESTful endpoints
 - ✅ Complete React frontend with Tailwind CSS
-- ✅ Handwriting template generator (83 characters)
+- ✅ Handwriting template generator (73 characters)
 - ✅ Python OpenCV character segmentation
 - ✅ PDF generation with handwriting rendering
-- ✅ Canvas-based character drawing
+- ✅ Canvas-based character drawing with auto-advance
 - ✅ **Font generation (TTF/WOFF2 export)**
-- ✅ User authentication and sessions
+- ✅ Auto-provisioning for Auth0 users
 - ✅ Production logging with Winston
 - ✅ Error handling middleware
 - ✅ Security headers (Helmet) and CORS
@@ -399,7 +487,8 @@ npm test
 
 ## Future Enhancements
 
-- [ ] Multiple handwriting styles per user
+- [x] ~~Multiple handwriting styles per user~~ ✅ Completed!
+- [x] ~~OAuth social login (Auth0)~~ ✅ Completed!
 - [ ] Font kerning and ligatures
 - [ ] Multiple font weights (Light, Regular, Bold)
 - [ ] Image-to-vector conversion for uploaded characters
@@ -410,8 +499,7 @@ npm test
 - [ ] Advanced OpenCV preprocessing options
 - [ ] Handwriting style customization (slant, spacing, size)
 - [ ] Custom template layouts
-- [ ] Email verification and password reset
-- [ ] OAuth social login (Auth0)
+- [ ] Email verification and password reset (via Auth0)
 - [ ] Export to various formats (PNG, SVG, etc.)
 - [ ] Batch PDF generation
 - [ ] WebSocket for real-time updates
