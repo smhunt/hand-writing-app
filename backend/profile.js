@@ -2,7 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { getUserById, getOrCreateAuth0User, saveCharacterImage, saveCharacterStrokes } = require('./storage');
+const { getUserById, getOrCreateAuth0User, getOrCreateDevUser, saveCharacterImage, saveCharacterStrokes } = require('./storage');
 const { segmentHandwritingSheet } = require('./handwriting');
 const { validateCharacterInput, validateFileUpload } = require('./middleware/validation');
 
@@ -105,12 +105,13 @@ router.post('/save-char', express.json(), validateCharacterInput, (req, res) => 
 
 // Get current profile info (e.g., which chars are available)
 router.get('/profile', (req, res) => {
-  // Auto-provision user if using Auth0
+  // Auto-provision user if using Auth0, or dev user otherwise
   let user;
   if (req.oidc && req.oidc.isAuthenticated()) {
     user = getOrCreateAuth0User(req.oidc.user);
   } else {
-    user = getUserById(req.session.userId);
+    // For dev mode, auto-provision the user
+    user = getOrCreateDevUser(req.session.userId);
   }
 
   if (!user) {

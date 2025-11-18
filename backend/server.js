@@ -11,7 +11,8 @@ const { requestLogger, addRequestTime } = require('./middleware/requestLogger');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
 const { apiLimiter } = require('./middleware/rateLimiter');
 
-const { auth0Middleware, getUserFromAuth0 } = require('./auth0');
+// Auth0 disabled for now
+// const { auth0Middleware, getUserFromAuth0 } = require('./auth0');
 const profileRoutes = require('./profile');
 const generateRoutes = require('./generate');
 const fontRoutes = require('./routes/font');
@@ -77,9 +78,9 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// Auth0 authentication middleware
-app.use(auth0Middleware);
-app.use(getUserFromAuth0);
+// Auth0 authentication middleware - DISABLED
+// app.use(auth0Middleware);
+// app.use(getUserFromAuth0);
 
 // Session middleware for additional session data
 app.use(session({
@@ -96,15 +97,25 @@ app.use(session({
   proxy: true,
 }));
 
+// Authentication check middleware - DISABLED (Auth0 turned off)
+// app.use(function(req, res, next) {
+//   // Simple middleware to protect routes: if not logged in, block access to protected APIs
+//   const publicPaths = ['/api/login', '/api/logout', '/api/callback', '/api/template', '/api/health'];
+//
+//   // Check if user is authenticated via Auth0
+//   const isAuthenticated = req.oidc && req.oidc.isAuthenticated();
+//
+//   if (!publicPaths.includes(req.path) && !isAuthenticated) {
+//     return res.status(401).json({ error: 'Not authenticated' });
+//   }
+//   next();
+// });
+
+// Mock user session middleware (since Auth0 is disabled)
 app.use(function(req, res, next) {
-  // Simple middleware to protect routes: if not logged in, block access to protected APIs
-  const publicPaths = ['/api/login', '/api/logout', '/api/callback', '/api/template', '/api/health'];
-
-  // Check if user is authenticated via Auth0
-  const isAuthenticated = req.oidc && req.oidc.isAuthenticated();
-
-  if (!publicPaths.includes(req.path) && !isAuthenticated) {
-    return res.status(401).json({ error: 'Not authenticated' });
+  if (!req.session.userId) {
+    req.session.userId = 'dev-user';
+    req.session.username = 'Developer';
   }
   next();
 });
@@ -113,22 +124,19 @@ app.use(function(req, res, next) {
 app.use('/uploads', express.static(path.join(__dirname, 'data/uploads')));
 app.use('/static', express.static(path.join(__dirname, 'public')));
 
-// Auth0 routes are automatically handled by auth0Middleware
+// Auth0 routes are automatically handled by auth0Middleware - DISABLED
 // Add a profile endpoint to get current user info
 app.get('/api/user', (req, res) => {
-  if (req.oidc.isAuthenticated()) {
-    res.json({
-      user: {
-        id: req.oidc.user.sub,
-        username: req.oidc.user.email || req.oidc.user.name,
-        email: req.oidc.user.email,
-        name: req.oidc.user.name,
-        picture: req.oidc.user.picture,
-      }
-    });
-  } else {
-    res.status(401).json({ error: 'Not authenticated' });
-  }
+  // Mock user for development (Auth0 disabled)
+  res.json({
+    user: {
+      id: 'dev-user',
+      username: 'Developer',
+      email: 'dev@example.com',
+      name: 'Developer',
+      picture: null,
+    }
+  });
 });
 
 // Routes

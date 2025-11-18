@@ -1,9 +1,8 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
-import { useAuth0 } from '@auth0/auth0-react';
+import { useNavigate } from 'react-router-dom';
 
 function LandingPage() {
-  const { loginWithRedirect } = useAuth0();
+  const navigate = useNavigate();
   const features = [
     {
       icon: '✍️',
@@ -83,13 +82,13 @@ function LandingPage() {
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center animate-slide-up">
               <button
-                onClick={() => loginWithRedirect({ authorizationParams: { screen_hint: 'signup' } })}
+                onClick={() => navigate('/profile')}
                 className="btn btn-primary text-lg px-8 py-4"
               >
                 Get Started Free
               </button>
               <button
-                onClick={() => loginWithRedirect()}
+                onClick={() => navigate('/profile')}
                 className="btn btn-secondary text-lg px-8 py-4"
               >
                 Sign In
@@ -161,7 +160,7 @@ function LandingPage() {
 
           <div className="text-center mt-12">
             <button
-              onClick={() => loginWithRedirect({ authorizationParams: { screen_hint: 'signup' } })}
+              onClick={() => navigate('/profile')}
               className="btn bg-white text-primary-700 hover:bg-primary-50 text-lg px-8 py-4 inline-block"
             >
               Start Creating Now
@@ -207,7 +206,7 @@ function LandingPage() {
             without the hassle of actually writing them by hand.
           </p>
           <button
-            onClick={() => loginWithRedirect({ authorizationParams: { screen_hint: 'signup' } })}
+            onClick={() => navigate('/profile')}
             className="btn bg-white text-accent-700 hover:bg-gray-100 text-lg px-10 py-5 inline-block font-semibold"
           >
             Create Your Free Account
@@ -233,8 +232,8 @@ function LandingPage() {
             <div>
               <h4 className="text-white font-semibold mb-4">Quick Links</h4>
               <ul className="space-y-2 text-sm">
-                <li><button onClick={() => loginWithRedirect({ authorizationParams: { screen_hint: 'signup' } })} className="hover:text-white transition-colors">Sign Up</button></li>
-                <li><button onClick={() => loginWithRedirect()} className="hover:text-white transition-colors">Login</button></li>
+                <li><button onClick={() => navigate('/profile')} className="hover:text-white transition-colors">Sign Up</button></li>
+                <li><button onClick={() => navigate('/profile')} className="hover:text-white transition-colors">Login</button></li>
                 <li><a href="#features" className="hover:text-white transition-colors">Features</a></li>
                 <li><a href="#how-it-works" className="hover:text-white transition-colors">How It Works</a></li>
               </ul>

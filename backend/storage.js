@@ -133,9 +133,44 @@ function saveCharacterImage(userId, char, imgTempPath) {
   saveDB();
 }
 
+// Get or create a dev/mock user (for development without Auth0)
+function getOrCreateDevUser(userId) {
+  let user = getUserById(userId);
+
+  if (!user) {
+    // Auto-provision dev user
+    user = {
+      id: userId,
+      username: 'Developer',
+      email: 'dev@example.com',
+      createdAt: new Date().toISOString(),
+      profile: {
+        letters: {},
+        fonts: {
+          default: {
+            id: 'default',
+            name: 'My Handwriting',
+            letters: {},
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          }
+        },
+        currentFontId: 'default'
+      }
+    };
+    db.users.push(user);
+    saveDB();
+    console.log(`[STORAGE] Auto-provisioned dev user: ${userId}`);
+  }
+
+  return user;
+}
+
 // Save character strokes (vector) to user's profile
 function saveCharacterStrokes(userId, char, strokes) {
-  const user = getUserById(userId);
+  // Auto-provision user if they don't exist (for dev mode)
+  const user = getOrCreateDevUser(userId);
+
   if (!user) {
     console.error('[STORAGE] User not found:', userId);
     return false;
@@ -234,6 +269,7 @@ module.exports = {
   getUserByUsername,
   getUserById,
   getOrCreateAuth0User,
+  getOrCreateDevUser,
   createUser,
   saveCharacterImage,
   saveCharacterStrokes,
