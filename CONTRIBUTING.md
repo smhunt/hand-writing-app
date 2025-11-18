@@ -4,6 +4,26 @@ Thank you for your interest in contributing! This guide will help you get starte
 
 ## Development Setup
 
+### Prerequisites
+
+- Node.js 18+ and npm
+- Docker & Docker Compose (optional but recommended)
+- Python 3.8+ (for OpenCV, optional)
+- **Auth0 Account** (free tier at https://auth0.com)
+
+### Auth0 Setup
+
+This application requires Auth0 for authentication. See the detailed setup instructions in the [README.md Auth0 Setup section](README.md#auth0-setup-required).
+
+**Quick Summary:**
+1. Create Auth0 account and tenant
+2. Create Regular Web Application
+3. Configure callback URLs:
+   - Allowed Callback URLs: `http://localhost:5001/api/callback`
+   - Allowed Logout URLs: `http://localhost:3000`
+   - Allowed Web Origins: `http://localhost:3000`
+4. Copy credentials to `.env` files (see `.env.example`)
+
 ### Quick Start
 
 1. **Clone and setup:**
@@ -31,17 +51,23 @@ Thank you for your interest in contributing! This guide will help you get starte
 
 ### Backend (`/backend`)
 - `server.js` - Express server setup and middleware
-- `auth.js` - Authentication routes (register, login, logout)
+- `auth0.js` - Auth0 integration and user auto-provisioning
 - `profile.js` - Profile management routes (template, upload, save-char)
 - `generate.js` - PDF generation route
 - `handwriting.js` - OpenCV image processing logic
 - `storage.js` - Data persistence layer
+- `fontGenerator.js` - Font generation (TTF/WOFF2)
+- `routes/font.js` - Font API endpoints
+- `config.js` - Centralized configuration
+- `logger.js` - Winston logging
 - `data/` - Database and uploaded files
 
 ### Frontend (`/frontend`)
 - `src/App.js` - Main app component with routing
-- `src/pages/` - Page components
+- `src/index.js` - Auth0Provider wrapper and app entry
+- `src/pages/` - Page components (Landing, Login, Profile, Compose, Draw)
 - `src/components/` - Reusable components (Canvas, etc.)
+- Styled with **Tailwind CSS**
 
 ### Tests (`/tests`)
 - `backend.test.js` - Backend API tests

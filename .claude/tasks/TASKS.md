@@ -286,8 +286,9 @@ When starting work, agents should:
 
 ## Current Priorities
 
-1. **P1:** Add Tailwind CSS
-2. **P1:** Create template generator
-3. **P2:** Improve OpenCV
-4. **P2:** Landing page
-5. **P3:** Design system docs
+1. **P0:** Merge Auth0 feature branch to main
+2. **P1:** Set up CI/CD pipeline (GitHub Actions)
+3. **P1:** Production deployment setup
+4. **P2:** Enhanced test coverage (E2E, Auth0 flow)
+5. **P2:** Performance monitoring
+6. **P3:** Design system docs

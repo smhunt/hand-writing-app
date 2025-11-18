@@ -6,87 +6,84 @@ All endpoints use JSON for request/response bodies unless otherwise specified.
 
 ## Authentication
 
-All endpoints except `/register`, `/login`, `/template`, and `/health` require authentication via session cookies.
+This API uses **Auth0** for authentication via the Universal Login flow.
 
-### Register User
+**Authentication Flow:**
+1. User clicks login and is redirected to Auth0 Universal Login
+2. After successful authentication, user is redirected back via `/api/callback`
+3. Session is established with secure, httpOnly cookies
+4. All subsequent requests include session cookie automatically
 
-**POST** `/api/register`
+**Public Endpoints** (no authentication required):
+- `/api/login` - Redirects to Auth0 login
+- `/api/logout` - Ends session and redirects to Auth0 logout
+- `/api/callback` - Auth0 callback handler
+- `/api/template` - Download handwriting template
+- `/api/health` - Server health check
 
-Create a new user account.
+**Protected Endpoints** (authentication required):
+All other endpoints require a valid Auth0 session.
 
-**Request Body:**
-```json
-{
-  "username": "string (required, unique)",
-  "password": "string (required, min 6 chars)"
-}
-```
+**Session Details:**
+- Duration: 24 hours with rolling renewal
+- Storage: Secure, httpOnly cookies
+- CSRF Protection: Built into express-openid-connect
 
-**Success Response (200):**
-```json
-{
-  "message": "User registered",
-  "user": {
-    "id": "uuid",
-    "username": "string"
-  }
-}
-```
+### Login (Auth0)
 
-**Error Responses:**
-- `400` - Missing username or password
-- `409` - Username already exists
-- `500` - Server error
+**GET** `/api/login`
 
----
+Initiate Auth0 Universal Login flow.
 
-### Login
+**Response:**
+- Redirects to Auth0 login page
+- User authenticates with Auth0 (email/password, social, etc.)
+- After success, redirects to `/api/callback`
 
-**POST** `/api/login`
-
-Authenticate a user and create a session.
-
-**Request Body:**
-```json
-{
-  "username": "string (required)",
-  "password": "string (required)"
-}
-```
-
-**Success Response (200):**
-```json
-{
-  "message": "Login successful",
-  "user": {
-    "id": "uuid",
-    "username": "string"
-  }
-}
-```
-
-Sets session cookie: `connect.sid`
-
-**Error Responses:**
-- `401` - Invalid username or password
-- `500` - Server error
+**No request body required**
 
 ---
 
-### Logout
+### Callback (Auth0)
 
-**POST** `/api/logout`
+**GET** `/api/callback`
 
-End the current session.
+Auth0 callback handler. Automatically handled by express-openid-connect.
 
-**Success Response (200):**
-```json
-{
-  "message": "Logged out"
-}
-```
+**Response:**
+- Establishes session with secure cookie
+- Redirects to frontend application
+- User is now authenticated
 
-Clears session cookie.
+**Note:** This endpoint is automatically configured and should not be called directly.
+
+---
+
+### Logout (Auth0)
+
+**GET** `/api/logout`
+
+End the current session and logout from Auth0.
+
+**Response:**
+- Destroys local session
+- Redirects to Auth0 logout
+- Clears all Auth0 sessions
+- Redirects back to application home
+
+**No request body required**
+
+---
+
+### Auto-Provisioning
+
+When a user logs in via Auth0 for the first time, the application automatically:
+1. Creates a user profile in the database
+2. Generates a unique user ID
+3. Associates the Auth0 sub (subject) with the user
+4. Creates necessary directories for uploads
+
+No manual registration step is required.
 
 ---
 
@@ -595,43 +592,57 @@ Cross-Origin Resource Sharing (CORS) is now implemented.
 
 ```mermaid
 sequenceDiagram
-    Client->>Server: POST /api/register
-    Server->>Server: Hash password
-    Server->>Database: Save user
-    Server->>Client: 200 + Set-Cookie
-    Client->>Server: POST /api/upload (with cookie)
-    Server->>Server: Verify session
-    Server->>Client: 200 + processed data
+    Client->>Backend: GET /api/login
+    Backend->>Auth0: Redirect to Universal Login
+    Auth0->>User: Show login page
+    User->>Auth0: Enter credentials
+    Auth0->>Backend: Redirect to /api/callback?code=...
+    Backend->>Auth0: Exchange code for tokens
+    Auth0->>Backend: Return user info & tokens
+    Backend->>Backend: Create/update user profile
+    Backend->>Client: Set session cookie & redirect
+    Client->>Backend: POST /api/upload (with cookie)
+    Backend->>Backend: Verify session
+    Backend->>Client: 200 + processed data
 ```
 
 ---
 
 ## Example Usage
 
-### Register and Login
+### Login with Auth0
 
 ```javascript
-// Register
-const registerRes = await fetch('/api/register', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  credentials: 'include',
-  body: JSON.stringify({
-    username: 'john',
-    password: 'securepass123'
-  })
-});
+// Frontend: Redirect to Auth0 login
+// Using @auth0/auth0-react
+import { useAuth0 } from '@auth0/auth0-react';
 
-// Login
-const loginRes = await fetch('/api/login', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  credentials: 'include',
-  body: JSON.stringify({
-    username: 'john',
-    password: 'securepass123'
-  })
-});
+function LoginButton() {
+  const { loginWithRedirect } = useAuth0();
+  return <button onClick={() => loginWithRedirect()}>Log In</button>;
+}
+
+// Or direct browser redirect
+window.location.href = '/api/login';
+
+// After login, user is automatically redirected back
+// Session cookie is set automatically
+
+// Check authentication status
+const { isAuthenticated, user } = useAuth0();
+if (isAuthenticated) {
+  console.log('Logged in as:', user.email);
+}
+
+// Logout
+function LogoutButton() {
+  const { logout } = useAuth0();
+  return (
+    <button onClick={() => logout({ returnTo: window.location.origin })}>
+      Log Out
+    </button>
+  );
+}
 ```
 
 ### Upload Handwriting Sheet
@@ -708,7 +719,7 @@ console.log('Skipped characters:', info.skippedCharacters);
 
 ## Future Enhancements
 
-- [ ] OAuth2 integration (Auth0)
+- [x] ~~OAuth2 integration (Auth0)~~ ✅ Completed!
 - [ ] JWT tokens as alternative to sessions
 - [ ] Font kerning and ligature support
 - [ ] Multiple font weights (Light, Regular, Bold)
@@ -719,3 +730,6 @@ console.log('Skipped characters:', info.skippedCharacters);
 - [ ] GraphQL API option
 - [ ] Font preview/testing endpoint
 - [ ] Custom font metrics configuration
+- [ ] Email verification (via Auth0)
+- [ ] Multi-factor authentication (MFA via Auth0)
+- [ ] Social login providers (Google, GitHub via Auth0)

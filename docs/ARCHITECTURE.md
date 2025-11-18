@@ -37,19 +37,26 @@ The Handwritten Note Web App is a full-stack application that enables users to d
 ### Frontend
 - **React 18** - UI framework
 - **React Router v6** - Client-side routing
+- **@auth0/auth0-react** - Auth0 authentication for React
+- **Tailwind CSS** - Utility-first styling
 - **HTML5 Canvas** - Drawing interface
 - **Fetch API** - HTTP requests
-- **CSS3** - Styling
 
 ### Backend
 - **Node.js 18** - Runtime environment
 - **Express 4** - Web framework
+- **Auth0** - Authentication and user management
+  - **express-openid-connect** - Auth0 middleware for Express
 - **Multer** - File upload middleware
 - **Express Session** - Session management
-- **bcrypt** - Password hashing
 - **PDFKit** - PDF generation
-- **OpenCV** - Image processing (via bindings or Python)
+- **opentype.js** - Font generation (TTF/OTF)
+- **ttf2woff2** - Web font conversion
+- **OpenCV** - Image processing (via Python)
 - **UUID** - Unique ID generation
+- **Winston** - Logging
+- **Helmet** - Security headers
+- **CORS** - Cross-origin resource sharing
 
 ### Infrastructure
 - **Docker** - Containerization
@@ -109,21 +116,26 @@ hand-writing-app/
 - Express Session
 - Cookie Parser
 
-#### 2. Authentication (auth.js)
+#### 2. Authentication (auth0.js)
 **Responsibilities:**
-- User registration
-- Login/logout
-- Password hashing
+- Auth0 integration via express-openid-connect
+- Universal Login flow
 - Session management
+- User auto-provisioning
+- Callback handling
 
 **Dependencies:**
-- bcrypt
+- express-openid-connect
 - storage module
 
-**Key Functions:**
-- `POST /register` - Create new user
-- `POST /login` - Authenticate user
-- `POST /logout` - End session
+**Key Middleware:**
+- `auth0Middleware` - Configures Auth0 integration
+- `getUserFromAuth0` - Auto-provisions users on first login
+
+**Key Routes (Auto-configured):**
+- `GET /api/login` - Redirects to Auth0 Universal Login
+- `GET /api/callback` - Auth0 callback handler
+- `GET /api/logout` - Ends session and Auth0 logout
 
 #### 3. Profile Management (profile.js)
 **Responsibilities:**
@@ -267,12 +279,12 @@ hand-writing-app/
 
 ## Data Flow
 
-### User Registration Flow
+### Auth0 Login Flow
 
 ```
-User Input → React Form → POST /api/register →
-  → Validate Input → Hash Password → Create User →
-  → Save to Database → Create Session → Response
+User Clicks Login → Redirect to Auth0 → User Authenticates →
+  → Auth0 Callback → Verify with Auth0 → Auto-Provision User →
+  → Create Session → Redirect to App
 ```
 
 ### Handwriting Capture Flow (Scan)
@@ -304,13 +316,23 @@ User Input → Text + Size → POST /api/generate →
 ## Security Architecture
 
 ### Authentication
-- **Password Hashing:** bcrypt with salt rounds
-- **Session Management:** Express sessions with secure cookies
-- **CSRF Protection:** Recommended for production
+- **Auth0 Universal Login:** Industry-standard OAuth2/OIDC flow
+- **Session Management:** Secure, httpOnly cookies with 24-hour duration
+- **CSRF Protection:** Built into express-openid-connect
+- **Password Security:** Managed by Auth0 (bcrypt + salt)
+- **MFA Support:** Available via Auth0 configuration
+- **Social Login:** Configurable through Auth0 (Google, GitHub, etc.)
 
 ### Authorization
-- **Middleware Check:** All protected routes verify `req.session.userId`
+- **Middleware Check:** All protected routes verify `req.oidc.isAuthenticated()`
 - **Resource Ownership:** Users can only access their own data
+- **Auto-Provisioning:** New Auth0 users automatically get profiles
+
+### Auth0 Configuration
+- **Environment Variables:** Stored in `.env` (never committed)
+- **Secrets Management:** Auth0 client secret, session secret
+- **Callback URLs:** Whitelisted in Auth0 dashboard
+- **Logout URLs:** Configured for proper sign-out flow
 
 ### Input Validation
 - **File Uploads:** Type and size restrictions
@@ -409,13 +431,16 @@ Session Store (Redis)
 ## Future Architecture Enhancements
 
 ### Phase 1 - Production Ready
-- [ ] Real database integration
-- [ ] Cloud storage for files
+- [x] ~~Real database integration~~ (In progress)
+- [x] ~~Auth0 authentication~~ ✅ Completed!
+- [ ] Cloud storage for files (S3, Cloudflare R2)
 - [ ] Redis session store
-- [ ] Proper logging framework
-- [ ] Error monitoring
-- [ ] Rate limiting
-- [ ] HTTPS/SSL
+- [ ] Proper logging framework (Winston configured)
+- [ ] Error monitoring (Sentry)
+- [ ] Rate limiting (Implemented, needs production tuning)
+- [ ] HTTPS/SSL certificates
+- [ ] Production Auth0 application
+- [ ] Environment-specific configurations
 
 ### Phase 2 - Advanced Features
 - [ ] WebSocket for real-time updates
