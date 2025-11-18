@@ -1,8 +1,9 @@
 import React from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
+import { useAuth0 } from '@auth0/auth0-react';
 
 function LandingPage() {
-  const navigate = useNavigate();
+  const { loginWithRedirect } = useAuth0();
   const features = [
     {
       icon: '✍️',
@@ -81,18 +82,18 @@ function LandingPage() {
               Personal touch meets modern convenience.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center animate-slide-up">
-              <Link
-                to="/register"
+              <button
+                onClick={() => loginWithRedirect({ authorizationParams: { screen_hint: 'signup' } })}
                 className="btn btn-primary text-lg px-8 py-4"
               >
                 Get Started Free
-              </Link>
-              <Link
-                to="/login"
+              </button>
+              <button
+                onClick={() => loginWithRedirect()}
                 className="btn btn-secondary text-lg px-8 py-4"
               >
                 Sign In
-              </Link>
+              </button>
             </div>
             <p className="text-sm text-gray-500 mt-4">
               No credit card required • Free forever
@@ -159,12 +160,12 @@ function LandingPage() {
           </div>
 
           <div className="text-center mt-12">
-            <Link
-              to="/register"
+            <button
+              onClick={() => loginWithRedirect({ authorizationParams: { screen_hint: 'signup' } })}
               className="btn bg-white text-primary-700 hover:bg-primary-50 text-lg px-8 py-4 inline-block"
             >
               Start Creating Now
-            </Link>
+            </button>
           </div>
         </div>
       </div>
@@ -205,12 +206,12 @@ function LandingPage() {
             Join thousands of people who've rediscovered the joy of handwritten notes
             without the hassle of actually writing them by hand.
           </p>
-          <Link
-            to="/register"
+          <button
+            onClick={() => loginWithRedirect({ authorizationParams: { screen_hint: 'signup' } })}
             className="btn bg-white text-accent-700 hover:bg-gray-100 text-lg px-10 py-5 inline-block font-semibold"
           >
             Create Your Free Account
-          </Link>
+          </button>
           <p className="text-sm mt-6 opacity-75">
             Takes less than 30 seconds • No credit card required
           </p>
@@ -232,8 +233,8 @@ function LandingPage() {
             <div>
               <h4 className="text-white font-semibold mb-4">Quick Links</h4>
               <ul className="space-y-2 text-sm">
-                <li><Link to="/register" className="hover:text-white transition-colors">Sign Up</Link></li>
-                <li><Link to="/login" className="hover:text-white transition-colors">Login</Link></li>
+                <li><button onClick={() => loginWithRedirect({ authorizationParams: { screen_hint: 'signup' } })} className="hover:text-white transition-colors">Sign Up</button></li>
+                <li><button onClick={() => loginWithRedirect()} className="hover:text-white transition-colors">Login</button></li>
                 <li><a href="#features" className="hover:text-white transition-colors">Features</a></li>
                 <li><a href="#how-it-works" className="hover:text-white transition-colors">How It Works</a></li>
               </ul>

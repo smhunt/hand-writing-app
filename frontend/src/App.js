@@ -1,31 +1,16 @@
 import React from 'react';
 import { Routes, Route, Link } from 'react-router-dom';
+import { useAuth0 } from '@auth0/auth0-react';
 import LandingPage from './pages/LandingPage';
-import LoginPage from './pages/LoginPage';
-import RegisterPage from './pages/RegisterPage';
 import ProfilePage from './pages/ProfilePage';
 import ComposePage from './pages/ComposePage';
 import DrawPage from './pages/DrawPage';
 
 function App() {
-  const [user, setUser] = React.useState(null);
-  const [isLoading, setIsLoading] = React.useState(true);
+  const { user, isAuthenticated, isLoading, loginWithRedirect, logout } = useAuth0();
 
-  // Check if user is logged in on mount
-  React.useEffect(() => {
-    fetch('/api/profile', { credentials: 'include' })
-      .then(res => res.ok ? res.json() : null)
-      .then(data => {
-        if (data) setUser(data);
-        setIsLoading(false);
-      })
-      .catch(() => setIsLoading(false));
-  }, []);
-
-  const handleLogout = async () => {
-    await fetch('/api/logout', { method: 'POST', credentials: 'include' });
-    setUser(null);
-    window.location.href = '/';
+  const handleLogout = () => {
+    logout({ logoutParams: { returnTo: window.location.origin } });
   };
 
   if (isLoading) {
@@ -43,8 +28,6 @@ function App() {
     <Routes>
       {/* Public routes - no navbar */}
       <Route path="/" element={<LandingPage />} />
-      <Route path="/login" element={<LoginPage onLogin={setUser} />} />
-      <Route path="/register" element={<RegisterPage onRegister={setUser} />} />
 
       {/* Protected routes - with navbar */}
       <Route
@@ -54,11 +37,11 @@ function App() {
             <nav className="bg-gradient-to-r from-primary-700 to-primary-900 text-white shadow-lg">
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="flex justify-between items-center h-16">
-                  <Link to={user ? "/profile" : "/"} className="text-2xl font-bold font-handwriting hover:opacity-80 transition-opacity">
+                  <Link to={isAuthenticated ? "/profile" : "/"} className="text-2xl font-bold font-handwriting hover:opacity-80 transition-opacity">
                     ✍️ Handwritten Notes
                   </Link>
                   <ul className="flex gap-6 items-center">
-                    {user ? (
+                    {isAuthenticated ? (
                       <>
                         <li><Link to="/profile" className="hover:text-primary-200 transition-colors">Profile</Link></li>
                         <li><Link to="/compose" className="hover:text-primary-200 transition-colors">Compose Note</Link></li>
@@ -75,14 +58,20 @@ function App() {
                     ) : (
                       <>
                         <li>
-                          <Link to="/login" className="hover:text-primary-200 transition-colors">
+                          <button
+                            onClick={() => loginWithRedirect()}
+                            className="hover:text-primary-200 transition-colors"
+                          >
                             Login
-                          </Link>
+                          </button>
                         </li>
                         <li>
-                          <Link to="/register" className="btn-primary">
+                          <button
+                            onClick={() => loginWithRedirect({ authorizationParams: { screen_hint: 'signup' } })}
+                            className="btn-primary"
+                          >
                             Get Started
-                          </Link>
+                          </button>
                         </li>
                       </>
                     )}
