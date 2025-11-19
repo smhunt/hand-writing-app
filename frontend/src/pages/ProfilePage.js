@@ -12,6 +12,15 @@ function ProfilePage({ user }) {
   const [drawModalOpen, setDrawModalOpen] = useState(false);
   const [selectedChar, setSelectedChar] = useState(null);
 
+  // Font library management state
+  const [fonts, setFonts] = useState([]);
+  const [currentFontId, setCurrentFontId] = useState('default');
+  const [currentFontName, setCurrentFontName] = useState('My Handwriting');
+  const [showNewFontDialog, setShowNewFontDialog] = useState(false);
+  const [newFontName, setNewFontName] = useState('');
+  const [renamingFontId, setRenamingFontId] = useState(null);
+  const [renameFontName, setRenameFontName] = useState('');
+
   // Define all expected characters
   const allCharacters = {
     'Uppercase': 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split(''),
@@ -21,37 +30,71 @@ function ProfilePage({ user }) {
   };
 
   useEffect(() => {
-    // Fetch profile info (which chars are available)
-    async function fetchProfile() {
-      const res = await fetch('/api/profile', { credentials: 'include' });
-      if (res.ok) {
-        const data = await res.json();
-        setAvailableChars(data.letters || []);
-        setCharacterData(data.characterData || {});
-        setStats(data.stats || { total: 0, vector: 0, image: 0 });
-      }
-    }
-
-    // Fetch font info if exists
-    async function fetchFontInfo() {
-      const res = await fetch('/api/font/info', { credentials: 'include' });
-      if (res.ok) {
-        const data = await res.json();
-        setFontInfo(data);
-      } else {
-        setFontInfo(null);
-      }
-    }
-
     if (user) {
       fetchProfile();
+      fetchFontLibrary();
       fetchFontInfo();
     }
   }, [user]);
 
-  const downloadTemplate = () => {
-    // Simply navigate to the template download endpoint
-    window.open('/api/template', '_blank');
+  // Fetch profile info (which chars are available)
+  const fetchProfile = async () => {
+    const res = await fetch('/api/profile', { credentials: 'include' });
+    if (res.ok) {
+      const data = await res.json();
+      setAvailableChars(data.letters || []);
+      setCharacterData(data.characterData || {});
+      setStats(data.stats || { total: 0, vector: 0, image: 0 });
+      setCurrentFontId(data.currentFontId || 'default');
+      setCurrentFontName(data.currentFontName || 'My Handwriting');
+    }
+  };
+
+  // Fetch font library
+  const fetchFontLibrary = async () => {
+    const res = await fetch('/api/fonts', { credentials: 'include' });
+    if (res.ok) {
+      const data = await res.json();
+      setFonts(data.fonts || []);
+      setCurrentFontId(data.currentFontId || 'default');
+    }
+  };
+
+  // Fetch font info if exists
+  const fetchFontInfo = async () => {
+    const res = await fetch('/api/font/info', { credentials: 'include' });
+    if (res.ok) {
+      const data = await res.json();
+      setFontInfo(data);
+    } else {
+      setFontInfo(null);
+    }
+  };
+
+  const downloadTemplate = async () => {
+    try {
+      const response = await fetch('/api/template', {
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error(`Download failed: ${response.statusText}`);
+      }
+
+      // Create blob and download link
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'handwriting-template.pdf';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Template download error:', error);
+      alert(`Failed to download template: ${error.message}`);
+    }
   };
 
   const openDrawModal = (char) => {
@@ -126,12 +169,122 @@ function ProfilePage({ user }) {
     }
   };
 
+  // Create a new font
+  const handleCreateFont = async () => {
+    if (!newFontName.trim()) {
+      alert('Please enter a font name');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/fonts', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newFontName.trim() }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to create font');
+      }
+
+      setNewFontName('');
+      setShowNewFontDialog(false);
+      await fetchFontLibrary();
+      alert(`Font "${data.font.name}" created successfully!`);
+    } catch (err) {
+      alert('Error: ' + err.message);
+    }
+  };
+
+  // Select/switch to a different font
+  const handleSelectFont = async (fontId) => {
+    try {
+      const res = await fetch(`/api/fonts/${fontId}/select`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to select font');
+      }
+
+      await fetchProfile();
+      await fetchFontLibrary();
+    } catch (err) {
+      alert('Error: ' + err.message);
+    }
+  };
+
+  // Rename a font
+  const handleRenameFont = async (fontId) => {
+    if (!renameFontName.trim()) {
+      alert('Please enter a new font name');
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/fonts/${fontId}`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: renameFontName.trim() }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to rename font');
+      }
+
+      setRenamingFontId(null);
+      setRenameFontName('');
+      await fetchFontLibrary();
+      await fetchProfile();
+    } catch (err) {
+      alert('Error: ' + err.message);
+    }
+  };
+
+  // Delete a font
+  const handleDeleteFont = async (fontId, fontName) => {
+    if (fontId === 'default') {
+      alert('Cannot delete the default font');
+      return;
+    }
+
+    if (!window.confirm(`Are you sure you want to delete the font "${fontName}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/fonts/${fontId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to delete font');
+      }
+
+      await fetchFontLibrary();
+      await fetchProfile();
+    } catch (err) {
+      alert('Error: ' + err.message);
+    }
+  };
+
   const handleGenerateFont = async (regenerate = false) => {
     try {
       setGeneratingFont(true);
       setFontStatus('Generating font...');
 
-      const res = await fetch('/api/font/generate', {
+      // Generate the current font using the new endpoint
+      const res = await fetch(`/api/fonts/${currentFontId}/generate`, {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -155,9 +308,43 @@ function ProfilePage({ user }) {
     }
   };
 
-  const downloadFont = (format) => {
+  const downloadFont = async (format) => {
     if (!user) return;
-    window.open(`/api/font/download/${user.id}/${format}`, '_blank');
+
+    try {
+      // Use the new font-specific download endpoint
+      const response = await fetch(`/api/fonts/${currentFontId}/download/${format}`, {
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error(`Download failed: ${response.statusText}`);
+      }
+
+      // Get the filename from Content-Disposition header or use default
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = `handwriting.${format}`;
+      if (contentDisposition) {
+        const matches = /filename="([^"]+)"/.exec(contentDisposition);
+        if (matches && matches[1]) {
+          filename = matches[1];
+        }
+      }
+
+      // Create blob and download link
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Font download error:', error);
+      alert(`Failed to download font: ${error.message}`);
+    }
   };
 
   if (!user) {
@@ -175,6 +362,151 @@ function ProfilePage({ user }) {
   return (
     <div className="animate-fade-in space-y-6">
       <h2 className="page-title">Your Handwriting Profile</h2>
+
+      {/* Font Library Section */}
+      <div className="card">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-xl font-semibold text-gray-900">Font Library</h3>
+          <button
+            onClick={() => setShowNewFontDialog(!showNewFontDialog)}
+            className="btn btn-primary text-sm"
+          >
+            ✨ New Font
+          </button>
+        </div>
+
+        {/* New Font Dialog */}
+        {showNewFontDialog && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+            <h4 className="font-semibold text-blue-900 mb-3">Create New Font</h4>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newFontName}
+                onChange={(e) => setNewFontName(e.target.value)}
+                placeholder="Font name (e.g., 'Cursive Style')"
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                onKeyPress={(e) => e.key === 'Enter' && handleCreateFont()}
+              />
+              <button onClick={handleCreateFont} className="btn btn-primary">
+                Create
+              </button>
+              <button onClick={() => setShowNewFontDialog(false)} className="btn btn-outline">
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Current Font Display */}
+        <div className="bg-gradient-to-br from-primary-50 to-accent-50 border-2 border-primary-300 rounded-lg p-4 mb-4">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-sm font-medium text-primary-600">Current Font:</span>
+            <span className="text-lg font-bold text-primary-900">{currentFontName}</span>
+          </div>
+          <p className="text-sm text-primary-700">
+            {stats.total} characters drawn for this font
+          </p>
+        </div>
+
+        {/* Font List */}
+        <div className="space-y-2">
+          {fonts.map((font) => (
+            <div
+              key={font.id}
+              className={`
+                border rounded-lg p-3 transition-all
+                ${font.isCurrent
+                  ? 'border-primary-400 bg-primary-50'
+                  : 'border-gray-200 bg-white hover:border-gray-300'
+                }
+              `}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  {renamingFontId === font.id ? (
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={renameFontName}
+                        onChange={(e) => setRenameFontName(e.target.value)}
+                        className="flex-1 px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        onKeyPress={(e) => e.key === 'Enter' && handleRenameFont(font.id)}
+                        autoFocus
+                      />
+                      <button
+                        onClick={() => handleRenameFont(font.id)}
+                        className="text-sm px-3 py-1 bg-primary-600 text-white rounded hover:bg-primary-700"
+                      >
+                        Save
+                      </button>
+                      <button
+                        onClick={() => {
+                          setRenamingFontId(null);
+                          setRenameFontName('');
+                        }}
+                        className="text-sm px-3 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className={`font-semibold ${font.isCurrent ? 'text-primary-900' : 'text-gray-900'}`}>
+                          {font.name}
+                        </span>
+                        {font.isCurrent && (
+                          <span className="text-xs bg-primary-600 text-white px-2 py-0.5 rounded-full">
+                            Active
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-600">
+                        {font.characterCount} characters • Created {new Date(font.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {renamingFontId !== font.id && (
+                  <div className="flex gap-2">
+                    {!font.isCurrent && (
+                      <button
+                        onClick={() => handleSelectFont(font.id)}
+                        className="text-sm px-3 py-1 bg-primary-600 text-white rounded hover:bg-primary-700"
+                      >
+                        Use This
+                      </button>
+                    )}
+                    <button
+                      onClick={() => {
+                        setRenamingFontId(font.id);
+                        setRenameFontName(font.name);
+                      }}
+                      className="text-sm px-3 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                    >
+                      Rename
+                    </button>
+                    {font.id !== 'default' && (
+                      <button
+                        onClick={() => handleDeleteFont(font.id, font.name)}
+                        className="text-sm px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200"
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <p className="text-sm text-gray-500 mt-4">
+          💡 Tip: Create multiple fonts for different styles (cursive, print, decorative, etc.)
+        </p>
+      </div>
 
       {/* Progress Tracker */}
       <div className="card">

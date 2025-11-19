@@ -37,6 +37,16 @@ backend/data/uploads/*
 !backend/data/uploads/.gitkeep
 !backend/data/uploads/tmp/.gitkeep
 
+# Generated fonts (user-specific)
+backend/data/fonts/*.ttf
+backend/data/fonts/*.woff2
+backend/data/fonts/*.css
+
+# Test files and temporary data
+backend/char_*.png
+backend/test_filled_template.jpg
+backend/test_template.pdf
+
 # Docker
 .dockerignore
 

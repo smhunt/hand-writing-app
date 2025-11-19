@@ -16,6 +16,7 @@ const { apiLimiter } = require('./middleware/rateLimiter');
 const profileRoutes = require('./profile');
 const generateRoutes = require('./generate');
 const fontRoutes = require('./routes/font');
+const { generateTemplate } = require('./templateGenerator');
 
 // Initialize Express
 const app = express();
@@ -137,6 +138,28 @@ app.get('/api/user', (req, res) => {
       picture: null,
     }
   });
+});
+
+// Template download endpoint
+app.get('/api/template', async (req, res) => {
+  try {
+    // Set headers for PDF download
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="handwriting-template.pdf"');
+
+    // Generate PDF and stream directly to response
+    await generateTemplate(res);
+
+    logger.info('Template PDF generated and sent successfully');
+  } catch (error) {
+    logger.error('Template generation error:', error);
+    if (!res.headersSent) {
+      res.status(500).json({
+        error: 'Failed to generate template',
+        message: error.message,
+      });
+    }
+  }
 });
 
 // Routes

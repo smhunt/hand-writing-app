@@ -92,15 +92,25 @@ function createSpaceGlyph() {
  */
 function createGlyphFromStrokes(char, strokes) {
   const unicode = getUnicodeForChar(char);
-  const path = canvasStrokesToOpentypePath(
+
+  // Normalize and center strokes for consistent alignment
+  const { normalizeStrokes } = require('./fontUtils');
+  const normalizedStrokes = normalizeStrokes(
     strokes,
+    CANVAS_WIDTH,
+    CANVAS_HEIGHT,
+    15 // Padding to avoid edges
+  );
+
+  const path = canvasStrokesToOpentypePath(
+    normalizedStrokes,
     CANVAS_WIDTH,
     CANVAS_HEIGHT,
     FONT_UNITS_PER_EM,
     true // Enable path smoothing
   );
 
-  // Calculate appropriate advance width based on character bounds
+  // Calculate appropriate advance width based on original character bounds
   const advanceWidth = calculateAdvanceWidth(
     strokes,
     CANVAS_WIDTH,
@@ -117,12 +127,112 @@ function createGlyphFromStrokes(char, strokes) {
 }
 
 /**
- * Generate glyphs from user profile data
+ * Create a glyph from an image file (scanned character)
  *
- * @param {Object} user - User object from storage
+ * @param {string} char - The character this glyph represents
+ * @param {string} imagePath - Path to the character image
+ * @returns {opentype.Glyph}
+ */
+function createGlyphFromImage(char, imagePath) {
+  const { execSync } = require('child_process');
+
+  try {
+    // Convert image to SVG path using Python script
+    const scriptPath = path.join(__dirname, 'image_to_svg.py');
+    const result = execSync(`python3 "${scriptPath}" "${imagePath}"`, {
+      encoding: 'utf-8',
+      timeout: 10000
+    });
+
+    const jsonResult = JSON.parse(result);
+
+    if (!jsonResult.success || !jsonResult.path) {
+      throw new Error(`Failed to convert image to SVG: ${jsonResult.error || 'Unknown error'}`);
+    }
+
+    // Parse SVG path and convert to OpenType path
+    const path = svgPathToOpentypePath(jsonResult.path);
+
+    // Calculate appropriate advance width (use default for now, can be improved)
+    const advanceWidth = DEFAULT_ADVANCE_WIDTH;
+
+    return new opentype.Glyph({
+      name: char,
+      unicode: getUnicodeForChar(char),
+      advanceWidth: advanceWidth,
+      path: path,
+    });
+  } catch (error) {
+    logger.error(`Failed to create glyph from image for '${char}':`, error);
+    throw error;
+  }
+}
+
+/**
+ * Convert SVG path string to OpenType Path object
+ *
+ * @param {string} svgPath - SVG path command string (e.g., "M 10 20 L 30 40 Z")
+ * @returns {opentype.Path}
+ */
+function svgPathToOpentypePath(svgPath) {
+  const path = new opentype.Path();
+
+  if (!svgPath) {
+    return path;
+  }
+
+  // Parse SVG path commands
+  const commands = svgPath.trim().split(/\s+/);
+  let currentCommand = null;
+  let i = 0;
+
+  while (i < commands.length) {
+    const token = commands[i];
+
+    if (token === 'M' || token === 'L') {
+      currentCommand = token;
+      i++;
+      continue;
+    } else if (token === 'Z') {
+      path.close();
+      i++;
+      continue;
+    }
+
+    // Parse coordinates
+    const x = parseFloat(token);
+    const y = parseFloat(commands[i + 1]);
+
+    if (isNaN(x) || isNaN(y)) {
+      i++;
+      continue;
+    }
+
+    // Scale from 200x200 image to 1000 units
+    const scale = FONT_UNITS_PER_EM / 200;
+    const scaledX = x * scale;
+    // Flip Y-axis (SVG has Y down, fonts have Y up)
+    const scaledY = (200 - y) * scale;
+
+    if (currentCommand === 'M') {
+      path.moveTo(scaledX, scaledY);
+    } else if (currentCommand === 'L') {
+      path.lineTo(scaledX, scaledY);
+    }
+
+    i += 2;
+  }
+
+  return path;
+}
+
+/**
+ * Generate glyphs from a letters object
+ *
+ * @param {Object} letters - Letters object mapping characters to data {type, strokes/imagePath}
  * @returns {{glyphs: Array<opentype.Glyph>, skippedChars: Array<string>, vectorChars: Array<string>}}
  */
-function generateGlyphsFromProfile(user) {
+function generateGlyphsFromLetters(letters) {
   const glyphs = [];
   const skippedChars = [];
   const vectorChars = [];
@@ -131,14 +241,13 @@ function generateGlyphsFromProfile(user) {
   glyphs.push(createNotDefGlyph());
 
   // Check if user has a space character, if not, add default space
-  const hasSpace = user.profile.letters[' '] && user.profile.letters[' '].type === 'vector';
+  const hasSpace = letters[' '] && letters[' '].type === 'vector';
   if (!hasSpace) {
     glyphs.push(createSpaceGlyph());
     logger.info('Added default space glyph');
   }
 
-  // Process each character in the user's profile
-  const letters = user.profile.letters || {};
+  // Process each character in the letters set
   Object.entries(letters).forEach(([char, data]) => {
     if (data.type === 'vector' && data.strokes && Array.isArray(data.strokes)) {
       try {
@@ -150,10 +259,17 @@ function generateGlyphsFromProfile(user) {
         logger.error(`Failed to create glyph for character '${char}':`, error);
         skippedChars.push(char);
       }
-    } else if (data.type === 'image') {
-      // Image characters are not supported yet
-      skippedChars.push(char);
-      logger.debug(`Skipped image-based character: ${char}`);
+    } else if (data.type === 'image' && data.imagePath) {
+      // Convert image to vector and create glyph
+      try {
+        const glyph = createGlyphFromImage(char, data.imagePath);
+        glyphs.push(glyph);
+        vectorChars.push(char);
+        logger.debug(`Created glyph from image for character: ${char} (Unicode: ${getUnicodeForChar(char)})`);
+      } catch (error) {
+        logger.error(`Failed to create glyph from image for '${char}':`, error);
+        skippedChars.push(char);
+      }
     } else {
       logger.warn(`Unknown character data type for '${char}':`, data);
       skippedChars.push(char);
@@ -166,21 +282,46 @@ function generateGlyphsFromProfile(user) {
 }
 
 /**
+ * Generate glyphs from user profile data (legacy method for backward compatibility)
+ *
+ * @param {Object} user - User object from storage
+ * @returns {{glyphs: Array<opentype.Glyph>, skippedChars: Array<string>, vectorChars: Array<string>}}
+ */
+function generateGlyphsFromProfile(user) {
+  const letters = user.profile.letters || {};
+  return generateGlyphsFromLetters(letters);
+}
+
+/**
  * Generate font for a user
  *
  * @param {string} userId - User ID
  * @param {Object} options - Font generation options
  * @param {string} options.familyName - Custom font family name (defaults to username)
  * @param {string} options.styleName - Font style name (default: 'Regular')
+ * @param {string} options.fontId - Specific font ID to generate (optional, defaults to user.profile.letters)
  * @returns {Promise<Object>} - Font generation result
  */
 async function generateFont(userId, options = {}) {
-  logger.info(`Starting font generation for user: ${userId}`);
+  logger.info(`Starting font generation for user: ${userId}${options.fontId ? `, font: ${options.fontId}` : ''}`);
 
   // Load user data
   const user = getUserById(userId);
   if (!user) {
     throw new Error(`User not found: ${userId}`);
+  }
+
+  // Determine which character set to use
+  let letters;
+  if (options.fontId) {
+    // Use specific font from font library
+    if (!user.profile.fonts || !user.profile.fonts[options.fontId]) {
+      throw new Error(`Font not found: ${options.fontId}`);
+    }
+    letters = user.profile.fonts[options.fontId].letters || {};
+  } else {
+    // Use legacy letters (backward compatibility)
+    letters = user.profile.letters || {};
   }
 
   // Determine font family name
@@ -190,8 +331,8 @@ async function generateFont(userId, options = {}) {
 
   logger.info(`Generating font: ${fullName}`);
 
-  // Generate glyphs from user profile
-  const { glyphs, skippedChars, vectorChars } = generateGlyphsFromProfile(user);
+  // Generate glyphs from the selected character set
+  const { glyphs, skippedChars, vectorChars } = generateGlyphsFromLetters(letters);
 
   if (glyphs.length <= 1) { // Only .notdef
     throw new Error('No vector characters available to generate font. Please draw some characters first.');
@@ -217,9 +358,12 @@ async function generateFont(userId, options = {}) {
     glyphs: glyphs,
   });
 
+  // Determine font file key (userId_fontId or just userId for legacy)
+  const fontKey = options.fontId ? `${userId}_${options.fontId}` : userId;
+
   // Generate TTF
   const ttfBuffer = Buffer.from(font.toArrayBuffer());
-  const ttfPath = path.join(FONTS_DIR, `${userId}.ttf`);
+  const ttfPath = path.join(FONTS_DIR, `${fontKey}.ttf`);
   fs.writeFileSync(ttfPath, ttfBuffer);
   logger.info(`Generated TTF font: ${ttfPath}`);
 
@@ -229,13 +373,13 @@ async function generateFont(userId, options = {}) {
     ttf2woff2 = (await import('ttf2woff2')).default;
   }
   const woff2Buffer = ttf2woff2(ttfBuffer);
-  const woff2Path = path.join(FONTS_DIR, `${userId}.woff2`);
+  const woff2Path = path.join(FONTS_DIR, `${fontKey}.woff2`);
   fs.writeFileSync(woff2Path, woff2Buffer);
   logger.info(`Generated WOFF2 font: ${woff2Path}`);
 
   // Generate CSS for web font usage
-  const cssContent = generateFontFaceCSS(familyName, userId);
-  const cssPath = path.join(FONTS_DIR, `${userId}.css`);
+  const cssContent = generateFontFaceCSS(familyName, fontKey);
+  const cssPath = path.join(FONTS_DIR, `${fontKey}.css`);
   fs.writeFileSync(cssPath, cssContent);
   logger.info(`Generated CSS file: ${cssPath}`);
 
@@ -268,10 +412,15 @@ async function generateFont(userId, options = {}) {
  * Generate @font-face CSS for web font usage
  *
  * @param {string} familyName - Font family name
- * @param {string} userId - User ID
+ * @param {string} fontKey - Font key (userId or userId_fontId)
  * @returns {string} - CSS content
  */
-function generateFontFaceCSS(familyName, userId) {
+function generateFontFaceCSS(familyName, fontKey) {
+  // Determine the download URL based on whether this is a multi-font (contains underscore)
+  const downloadUrl = fontKey.includes('_')
+    ? `/api/fonts/${fontKey.split('_')[1]}/download/woff2`
+    : `/api/font/download/${fontKey}/woff2`;
+
   return `/**
  * Custom Handwriting Font
  * Generated by Handwriting App
@@ -279,7 +428,7 @@ function generateFontFaceCSS(familyName, userId) {
 
 @font-face {
   font-family: '${familyName}';
-  src: url('/api/font/download/${userId}/woff2') format('woff2');
+  src: url('${downloadUrl}') format('woff2');
   font-weight: normal;
   font-style: normal;
   font-display: swap;
@@ -294,47 +443,60 @@ function generateFontFaceCSS(familyName, userId) {
 }
 
 /**
- * Check if a font exists for a user
+ * Check if a font exists for a user/font
  *
- * @param {string} userId - User ID
+ * @param {string} fontKey - Font key (userId or userId_fontId)
  * @returns {boolean}
  */
-function fontExists(userId) {
-  const ttfPath = path.join(FONTS_DIR, `${userId}.ttf`);
+function fontExists(fontKey) {
+  const ttfPath = path.join(FONTS_DIR, `${fontKey}.ttf`);
   return fs.existsSync(ttfPath);
 }
 
 /**
  * Get font file path
  *
- * @param {string} userId - User ID
+ * @param {string} fontKey - Font key (userId or userId_fontId)
  * @param {string} format - Font format ('ttf' or 'woff2')
  * @returns {string|null} - File path or null if not found
  */
-function getFontPath(userId, format = 'ttf') {
+function getFontPath(fontKey, format = 'ttf') {
   const validFormats = ['ttf', 'woff2', 'css'];
   if (!validFormats.includes(format)) {
     throw new Error(`Invalid font format: ${format}. Must be one of: ${validFormats.join(', ')}`);
   }
 
-  const fontPath = path.join(FONTS_DIR, `${userId}.${format}`);
+  const fontPath = path.join(FONTS_DIR, `${fontKey}.${format}`);
   return fs.existsSync(fontPath) ? fontPath : null;
 }
 
 /**
- * Get font information for a user
+ * Get font information for a user/font
  *
- * @param {string} userId - User ID
+ * @param {string} fontKey - Font key (userId or userId_fontId)
  * @returns {Object|null} - Font info or null if not found
  */
-function getFontInfo(userId) {
+function getFontInfo(fontKey) {
+  // Parse fontKey to get userId (and fontId if present)
+  const parts = fontKey.split('_');
+  const userId = parts[0];
+  const fontId = parts[1] || null;
+
   const user = getUserById(userId);
   if (!user) return null;
 
-  const ttfPath = getFontPath(userId, 'ttf');
+  const ttfPath = getFontPath(fontKey, 'ttf');
   if (!ttfPath) return null;
 
-  const { vectorChars, skippedChars } = generateGlyphsFromProfile(user);
+  // Get letters from appropriate source
+  let letters;
+  if (fontId && user.profile.fonts && user.profile.fonts[fontId]) {
+    letters = user.profile.fonts[fontId].letters || {};
+  } else {
+    letters = user.profile.letters || {};
+  }
+
+  const { vectorChars, skippedChars } = generateGlyphsFromLetters(letters);
   const familyName = `${user.username}Handwriting`;
 
   return {
@@ -343,25 +505,25 @@ function getFontInfo(userId) {
     characters: vectorChars,
     skippedCharacters: skippedChars,
     formats: {
-      ttf: fs.existsSync(path.join(FONTS_DIR, `${userId}.ttf`)),
-      woff2: fs.existsSync(path.join(FONTS_DIR, `${userId}.woff2`)),
-      css: fs.existsSync(path.join(FONTS_DIR, `${userId}.css`)),
+      ttf: fs.existsSync(path.join(FONTS_DIR, `${fontKey}.ttf`)),
+      woff2: fs.existsSync(path.join(FONTS_DIR, `${fontKey}.woff2`)),
+      css: fs.existsSync(path.join(FONTS_DIR, `${fontKey}.css`)),
     },
   };
 }
 
 /**
- * Delete font files for a user
+ * Delete font files for a user/font
  *
- * @param {string} userId - User ID
+ * @param {string} fontKey - Font key (userId or userId_fontId)
  * @returns {boolean} - True if files were deleted
  */
-function deleteFont(userId) {
+function deleteFont(fontKey) {
   let deleted = false;
   const formats = ['ttf', 'woff2', 'css'];
 
   formats.forEach(format => {
-    const fontPath = path.join(FONTS_DIR, `${userId}.${format}`);
+    const fontPath = path.join(FONTS_DIR, `${fontKey}.${format}`);
     if (fs.existsSync(fontPath)) {
       fs.unlinkSync(fontPath);
       logger.info(`Deleted font file: ${fontPath}`);

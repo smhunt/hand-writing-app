@@ -2,14 +2,31 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { getUserById, getOrCreateAuth0User, getOrCreateDevUser, saveCharacterImage, saveCharacterStrokes } = require('./storage');
+const {
+  getUserById,
+  getOrCreateAuth0User,
+  getOrCreateDevUser,
+  saveCharacterImage,
+  saveCharacterStrokes,
+  saveCharacterToFont,
+} = require('./storage');
 const { segmentHandwritingSheet } = require('./handwriting');
 const { validateCharacterInput, validateFileUpload } = require('./middleware/validation');
 
 const router = express.Router();
 
-// Configure Multer to save uploads to a temp directory
-const upload = multer({ dest: path.join(__dirname, 'data/uploads/tmp') });
+// Configure Multer to save uploads to a temp directory with original extension
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, path.join(__dirname, 'data/uploads/tmp'));
+  },
+  filename: function (req, file, cb) {
+    // Keep original extension for OpenCV
+    const ext = path.extname(file.originalname);
+    cb(null, Date.now() + '-' + Math.round(Math.random() * 1E9) + ext);
+  }
+});
+const upload = multer({ storage: storage });
 
 // Download handwriting template (PDF)
 router.get('/template', (req, res) => {
@@ -37,12 +54,20 @@ router.post('/upload', upload.single('sheet'), validateFileUpload, async (req, r
   }
 
   try {
-    // Auto-provision user if using Auth0
+    // Auto-provision user if using Auth0, or dev user otherwise
+    let user;
     if (req.oidc && req.oidc.isAuthenticated()) {
-      getOrCreateAuth0User(req.oidc.user);
+      user = getOrCreateAuth0User(req.oidc.user);
+    } else {
+      // For dev mode, auto-provision the user
+      user = getOrCreateDevUser(req.session.userId);
     }
 
-    const userId = req.session.userId || (req.oidc && req.oidc.user && req.oidc.user.sub);
+    if (!user || !user.id) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    const userId = user.id;
     const imagePath = req.file.path; // temporary saved path
 
     // Process the image to segment into characters
@@ -60,7 +85,7 @@ router.post('/upload', upload.single('sheet'), validateFileUpload, async (req, r
     res.json({ message: 'Sheet processed successfully', chars: Object.keys(segments) });
   } catch (err) {
     console.error('Error processing handwriting sheet:', err);
-    res.status(500).json({ error: 'Failed to process sheet' });
+    res.status(500).json({ error: 'Failed to process sheet', details: err.message });
   }
 });
 
@@ -88,15 +113,29 @@ router.post('/save-char', express.json(), validateCharacterInput, (req, res) => 
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
-    const saved = saveCharacterStrokes(userId, char, strokes);
+    // Get user to determine current font
+    const user = getUserById(userId);
+    if (!user) {
+      console.log(`[SAVE-CHAR] User ${userId} not found`);
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Use current font or default
+    const currentFontId = user.profile.currentFontId || 'default';
+
+    // Save to current font (this also updates legacy letters for backward compatibility)
+    const saved = saveCharacterToFont(userId, currentFontId, char, strokes);
 
     if (!saved) {
-      console.log(`[SAVE-CHAR] Failed to save character ${char} for user ${userId}`);
+      console.log(`[SAVE-CHAR] Failed to save character ${char} to font ${currentFontId} for user ${userId}`);
       return res.status(500).json({ error: 'Failed to save character to database' });
     }
 
-    console.log(`[SAVE-CHAR] Successfully saved character ${char} for user ${userId}`);
-    res.json({ message: `Character ${char} saved` });
+    console.log(`[SAVE-CHAR] Successfully saved character ${char} to font ${currentFontId} for user ${userId}`);
+    res.json({
+      message: `Character ${char} saved`,
+      fontId: currentFontId,
+    });
   } catch (error) {
     console.error('[SAVE-CHAR] Error:', error);
     res.status(500).json({ error: 'Failed to save character', details: error.message });
@@ -118,9 +157,12 @@ router.get('/profile', (req, res) => {
     return res.status(404).json({ error: 'User not found' });
   }
 
-  // Return a detailed summary of all characters
-  const profile = user.profile || {};
-  const letters = profile.letters || {};
+  // Get current font or default
+  const currentFontId = user.profile.currentFontId || 'default';
+  const currentFont = user.profile.fonts?.[currentFontId];
+
+  // Return characters from current font (fall back to legacy letters if needed)
+  const letters = currentFont?.letters || user.profile.letters || {};
 
   // Organize characters by type
   const characterData = {};
@@ -134,6 +176,8 @@ router.get('/profile', (req, res) => {
   res.json({
     id: user.id,
     username: user.username,
+    currentFontId: currentFontId,
+    currentFontName: currentFont?.name || 'My Handwriting',
     letters: Object.keys(letters),
     characterData: characterData,
     stats: {

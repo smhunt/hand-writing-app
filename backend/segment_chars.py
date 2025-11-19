@@ -1,222 +1,312 @@
 #!/usr/bin/env python3
 """
-Handwriting Character Segmentation Script
+Character Segmentation Script
 
-This script uses OpenCV to segment a scanned handwriting template
-into individual character images.
-
-Requirements:
-    pip install opencv-python numpy
+This script processes a scanned handwriting template and extracts individual
+character images from the boxes.
 
 Usage:
     python3 segment_chars.py <image_path>
 
 Output:
-    JSON object mapping character labels to saved image paths
+    JSON mapping of character to extracted image path:
+    {"A": "/path/to/A.png", "B": "/path/to/B.png", ...}
 """
 
+import sys
+import os
+import json
 import cv2
 import numpy as np
-import sys
-import json
-import os
-import uuid
 from pathlib import Path
 
+# Expected character sequence (must match templateGenerator.js)
+CHARACTER_SEQUENCE = (
+    list('ABCDEFGHIJKLMNOPQRSTUVWXYZ') +  # Uppercase
+    list('abcdefghijklmnopqrstuvwxyz') +  # Lowercase
+    list('0123456789') +                  # Numbers
+    list('.,!?;:\'"()-')                  # Symbols
+)
 
-class HandwritingSegmenter:
-    """Segments handwriting template into individual characters"""
+def debug_log(message):
+    """Log debug messages to stderr"""
+    print(f"[DEBUG] {message}", file=sys.stderr)
 
-    def __init__(self, template_config=None):
-        """
-        Initialize segmenter with template configuration
+def find_character_boxes(image):
+    """
+    Find character boxes in the scanned template using edge detection.
+    This works for both empty and filled templates.
 
-        Args:
-            template_config (dict): Template layout configuration
-        """
-        self.config = template_config or {
-            'rows': 9,
-            'cols': 8,
-            'characters': list('ABCDEFGHIJKLMNOPQRSTUVWXYZ') +
-                          list('abcdefghijklmnopqrstuvwxyz') +
-                          list('0123456789') +
-                          list('.,!?;:\'"()-'),
-            'box_margin': 10,  # Margin around detected boxes
-        }
-        self.output_dir = Path(__file__).parent / 'data' / 'uploads' / 'tmp'
-        self.output_dir.mkdir(parents=True, exist_ok=True)
+    Returns:
+        List of tuples (x, y, w, h) representing box coordinates, sorted by position
+    """
+    debug_log(f"Image shape: {image.shape}")
 
-    def preprocess_image(self, image):
-        """
-        Preprocess image for better contour detection
+    # Convert to grayscale
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-        Args:
-            image: Input image (BGR)
+    # Use Canny edge detection to find box borders
+    edges = cv2.Canny(gray, 50, 150, apertureSize=3)
 
-        Returns:
-            Preprocessed binary image
-        """
-        # Convert to grayscale
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    # Dilate edges to connect broken lines
+    kernel = np.ones((3, 3), np.uint8)
+    dilated = cv2.dilate(edges, kernel, iterations=2)
 
-        # Apply Gaussian blur to reduce noise
-        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    # Find contours on the dilated edges
+    contours, _ = cv2.findContours(
+        dilated, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE
+    )
 
-        # Apply adaptive thresholding
-        binary = cv2.adaptiveThreshold(
-            blurred,
-            255,
-            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-            cv2.THRESH_BINARY_INV,
-            11,
-            2
-        )
+    debug_log(f"Found {len(contours)} contours")
 
-        # Morphological operations to clean up
-        kernel = np.ones((3, 3), np.uint8)
-        cleaned = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
-        cleaned = cv2.morphologyEx(cleaned, cv2.MORPH_OPEN, kernel)
+    # Filter contours to find boxes
+    boxes = []
+    image_area = image.shape[0] * image.shape[1]
 
-        return cleaned
+    # Expected box size (adjust based on template)
+    expected_box_size = 80  # From generate_test_template.py
+    size_tolerance = 0.5  # 50% tolerance
+    min_box_size = expected_box_size * (1 - size_tolerance)
+    max_box_size = expected_box_size * (1 + size_tolerance)
 
-    def find_character_boxes(self, binary_image):
-        """
-        Detect character boxes in the template
+    for contour in contours:
+        # Approximate the contour to a polygon
+        epsilon = 0.02 * cv2.arcLength(contour, True)
+        approx = cv2.approxPolyDP(contour, epsilon, True)
 
-        Args:
-            binary_image: Preprocessed binary image
+        # Look for quadrilaterals (4 corners)
+        if len(approx) >= 4:
+            x, y, w, h = cv2.boundingRect(contour)
+            area = w * h
+            aspect_ratio = w / h if h > 0 else 0
 
-        Returns:
-            List of bounding boxes (x, y, w, h) sorted top-left to bottom-right
-        """
-        # Find contours
-        contours, _ = cv2.findContours(
-            binary_image,
-            cv2.RETR_EXTERNAL,
-            cv2.CHAIN_APPROX_SIMPLE
-        )
+            # Filter based on size and aspect ratio
+            # Boxes should be roughly square and reasonable size
+            if (min_box_size < w < max_box_size and
+                min_box_size < h < max_box_size and
+                0.7 < aspect_ratio < 1.3 and   # Roughly square
+                area > 1000 and                # Minimum area
+                area < image_area * 0.05):     # Not too large
+                boxes.append((x, y, w, h))
 
-        # Filter contours by size (assume character boxes are reasonably sized)
-        boxes = []
-        image_area = binary_image.shape[0] * binary_image.shape[1]
-        min_area = image_area * 0.001  # At least 0.1% of image
-        max_area = image_area * 0.1    # At most 10% of image
+    debug_log(f"Found {len(boxes)} candidate boxes")
 
-        for contour in contours:
-            area = cv2.contourArea(contour)
-            if min_area < area < max_area:
-                x, y, w, h = cv2.boundingRect(contour)
-                # Filter by aspect ratio (boxes should be roughly square)
-                aspect_ratio = w / h
-                if 0.5 < aspect_ratio < 2.0:
-                    boxes.append((x, y, w, h))
+    # Remove duplicate/overlapping boxes
+    boxes = remove_overlapping_boxes(boxes)
+    debug_log(f"After removing overlaps: {len(boxes)} boxes")
 
-        # Sort boxes: top-to-bottom, left-to-right
-        boxes.sort(key=lambda b: (b[1] // 100, b[0]))  # Group by rows, then sort by x
+    # Sort boxes by position (top to bottom, left to right)
+    # Group by rows first (boxes with similar y-coordinates)
+    boxes.sort(key=lambda b: (b[1] // 100, b[0]))
 
-        return boxes
+    return boxes
 
-    def extract_character(self, image, box):
-        """
-        Extract and save a character from the image
+def remove_overlapping_boxes(boxes):
+    """Remove boxes that significantly overlap with others"""
+    if not boxes:
+        return []
 
-        Args:
-            image: Original image
-            box: Bounding box (x, y, w, h)
+    # Sort by area (largest first)
+    boxes = sorted(boxes, key=lambda b: b[2] * b[3], reverse=True)
 
-        Returns:
-            Path to saved character image
-        """
-        x, y, w, h = box
-        margin = self.config['box_margin']
+    filtered = []
+    for box in boxes:
+        x1, y1, w1, h1 = box
+        overlaps = False
 
-        # Add margin and ensure within bounds
-        x1 = max(0, x - margin)
-        y1 = max(0, y - margin)
-        x2 = min(image.shape[1], x + w + margin)
-        y2 = min(image.shape[0], y + h + margin)
+        for kept_box in filtered:
+            x2, y2, w2, h2 = kept_box
 
-        # Crop character region
-        char_img = image[y1:y2, x1:x2]
+            # Calculate overlap
+            x_overlap = max(0, min(x1 + w1, x2 + w2) - max(x1, x2))
+            y_overlap = max(0, min(y1 + h1, y2 + h2) - max(y1, y2))
+            overlap_area = x_overlap * y_overlap
 
-        # Convert to grayscale and threshold
-        if len(char_img.shape) == 3:
-            char_gray = cv2.cvtColor(char_img, cv2.COLOR_BGR2GRAY)
-        else:
-            char_gray = char_img
+            box_area = w1 * h1
+            if overlap_area > box_area * 0.5:  # More than 50% overlap
+                overlaps = True
+                break
 
-        # Apply threshold
-        _, char_binary = cv2.threshold(
-            char_gray,
-            0,
-            255,
-            cv2.THRESH_BINARY + cv2.THRESH_OTSU
-        )
+        if not overlaps:
+            filtered.append(box)
+
+    return filtered
+
+def extract_character_region(image, box, padding=5):
+    """
+    Extract and preprocess a character region from the image.
+    Centers the character within a fixed-size canvas for consistent alignment.
+
+    Args:
+        image: Source image
+        box: Tuple (x, y, w, h) of the box
+        padding: Pixels to remove from edges to avoid box borders
+
+    Returns:
+        Extracted and processed character image, centered and normalized
+    """
+    x, y, w, h = box
+
+    # Add padding to avoid box borders
+    x1 = max(0, x + padding)
+    y1 = max(0, y + padding)
+    x2 = min(image.shape[1], x + w - padding)
+    y2 = min(image.shape[0], y + h - padding)
+
+    # Extract region
+    char_img = image[y1:y2, x1:x2]
+
+    # Convert to grayscale if needed
+    if len(char_img.shape) == 3:
+        char_img = cv2.cvtColor(char_img, cv2.COLOR_BGR2GRAY)
+
+    # Apply thresholding to clean up
+    _, char_img = cv2.threshold(
+        char_img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
+    )
+
+    # Invert if needed (we want black on white)
+    if np.mean(char_img) < 127:
+        char_img = cv2.bitwise_not(char_img)
+
+    # Find actual character bounds (trim whitespace)
+    char_img = center_and_normalize_character(char_img)
+
+    return char_img
+
+def center_and_normalize_character(char_img, target_size=200, margin=20):
+    """
+    Center a character within a fixed-size canvas with consistent margins.
+    This ensures all characters align properly in the generated font.
+
+    Args:
+        char_img: Binary character image (white background, black foreground)
+        target_size: Target canvas size in pixels (square)
+        margin: Minimum margin around character
+
+    Returns:
+        Centered and normalized character image
+    """
+    # Find bounding box of actual character (non-white pixels)
+    # Invert for contour detection (OpenCV finds white objects on black background)
+    inverted = cv2.bitwise_not(char_img)
+    coords = cv2.findNonZero(inverted)
+
+    if coords is None:
+        # Empty character, return blank canvas
+        return np.ones((target_size, target_size), dtype=np.uint8) * 255
+
+    # Get bounding rectangle
+    x, y, w, h = cv2.boundingRect(coords)
+
+    # Extract just the character
+    char_only = char_img[y:y+h, x:x+w]
+
+    # Calculate scale to fit within target size with margin
+    available_size = target_size - (2 * margin)
+    scale = min(available_size / w, available_size / h)
+
+    # Don't upscale, only downscale if necessary
+    if scale > 1.0:
+        scale = 1.0
+
+    # Resize character
+    new_w = int(w * scale)
+    new_h = int(h * scale)
+
+    if new_w > 0 and new_h > 0:
+        char_resized = cv2.resize(char_only, (new_w, new_h), interpolation=cv2.INTER_AREA)
+    else:
+        char_resized = char_only
+
+    # Create blank canvas
+    canvas = np.ones((target_size, target_size), dtype=np.uint8) * 255
+
+    # Calculate position to center character
+    offset_x = (target_size - new_w) // 2
+    offset_y = (target_size - new_h) // 2
+
+    # Place character on canvas
+    canvas[offset_y:offset_y+new_h, offset_x:offset_x+new_w] = char_resized
+
+    return canvas
+
+def segment_template(image_path):
+    """
+    Main segmentation function.
+
+    Args:
+        image_path: Path to the scanned template image
+
+    Returns:
+        Dictionary mapping character to saved image path
+    """
+    debug_log(f"Processing image: {image_path}")
+
+    # Load image
+    if not os.path.exists(image_path):
+        raise FileNotFoundError(f"Image not found: {image_path}")
+
+    image = cv2.imread(image_path)
+    if image is None:
+        raise ValueError(f"Failed to load image: {image_path}")
+
+    # Find character boxes
+    boxes = find_character_boxes(image)
+
+    if len(boxes) == 0:
+        raise ValueError("No character boxes found in image. Please ensure the template is clearly scanned.")
+
+    debug_log(f"Detected {len(boxes)} boxes, expecting {len(CHARACTER_SEQUENCE)} characters")
+
+    # Create output directory
+    output_dir = Path(image_path).parent
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    result = {}
+
+    # Match boxes to characters
+    num_chars = min(len(boxes), len(CHARACTER_SEQUENCE))
+
+    for i in range(num_chars):
+        char = CHARACTER_SEQUENCE[i]
+        box = boxes[i]
+
+        # Extract character
+        char_img = extract_character_region(image, box)
 
         # Save character image
-        filename = f"{uuid.uuid4().hex}.png"
-        output_path = self.output_dir / filename
-        cv2.imwrite(str(output_path), char_binary)
+        # Use safe filename for special characters
+        safe_char = char
+        if char in '<>:"/\\|?*':
+            safe_char = f"sym_{ord(char)}"
 
-        return str(output_path)
+        output_path = output_dir / f"char_{safe_char}_{i}.png"
+        cv2.imwrite(str(output_path), char_img)
 
-    def segment(self, image_path):
-        """
-        Segment handwriting template into character images
+        result[char] = str(output_path)
 
-        Args:
-            image_path: Path to scanned template image
+    debug_log(f"Successfully extracted {len(result)} characters")
 
-        Returns:
-            Dictionary mapping character labels to image paths
-        """
-        # Load image
-        image = cv2.imread(image_path)
-        if image is None:
-            raise ValueError(f"Could not load image: {image_path}")
-
-        # Preprocess
-        binary = self.preprocess_image(image)
-
-        # Find character boxes
-        boxes = self.find_character_boxes(binary)
-
-        # Extract characters and map to labels
-        result = {}
-        characters = self.config['characters']
-
-        for i, box in enumerate(boxes):
-            if i >= len(characters):
-                break  # More boxes than expected characters
-
-            char_label = characters[i]
-            char_path = self.extract_character(image, box)
-            result[char_label] = char_path
-
-        return result
-
+    return result
 
 def main():
-    """Main entry point for CLI usage"""
-    if len(sys.argv) < 2:
-        print(json.dumps({'error': 'No image path provided'}))
+    """Main entry point"""
+    if len(sys.argv) != 2:
+        print(json.dumps({"error": "Usage: segment_chars.py <image_path>"}))
         sys.exit(1)
 
     image_path = sys.argv[1]
 
-    if not os.path.exists(image_path):
-        print(json.dumps({'error': f'Image not found: {image_path}'}))
-        sys.exit(1)
-
     try:
-        segmenter = HandwritingSegmenter()
-        result = segmenter.segment(image_path)
+        result = segment_template(image_path)
+        # Output result as JSON to stdout
         print(json.dumps(result))
         sys.exit(0)
     except Exception as e:
-        print(json.dumps({'error': str(e)}))
+        debug_log(f"Error: {str(e)}")
+        print(json.dumps({"error": str(e)}))
         sys.exit(1)
 
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
